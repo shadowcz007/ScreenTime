@@ -45,9 +45,11 @@ struct MessageResponse {
     content: String,
 }
 
-pub async fn analyze_screenshot(
+pub async fn analyze_screenshot_with_prompt(
     api_key: &str,
+    model: &str,
     image_path: &str,
+    prompt: &str,
 ) -> Result<String, Box<dyn Error>> {
     let client = reqwest::Client::new();
     let url = "https://api.siliconflow.cn/v1/chat/completions";
@@ -59,13 +61,13 @@ pub async fn analyze_screenshot(
     
     // 构建请求体
     let request_body = SiliconFlowRequest {
-        model: "Qwen/Qwen2-VL-7B-Instruct".to_string(), // 使用Qwen的视觉模型
+        model: model.to_string(),
         messages: vec![Message {
             role: "user".to_string(),
             content: vec![
                 Content {
                     content_type: "text".to_string(),
-                    text: Some("请描述这张图片中用户正在做什么，尽可能详细一些。".to_string()),
+                    text: Some(prompt.to_string()),
                     image_url: None,
                 },
                 Content {
