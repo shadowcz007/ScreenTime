@@ -9,7 +9,7 @@ mod permissions; // 新增权限模块
 mod mcp_service; // MCP服务模块
 
 use std::error::Error;
-use std::sync::Arc;
+
 use mcp_service::ScreenTimeService;
 use rmcp::transport::sse_server::{SseServer, SseServerConfig};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

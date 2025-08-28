@@ -22,3 +22,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio-util = "0.7"
 rmcp = { version = "0.6.0", features = ["server", "transport-sse-server"] }
 tower-http = { version = "0.5", features = ["cors"] }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "processthreadsapi", "psapi", "winbase"] }
+
+[[bin]]
+name = "test_windows_compatibility"
+path = "test_windows_compatibility.rs"

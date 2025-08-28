@@ -1,7 +1,25 @@
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
-use std::process::Command;
+
 use tokio::time::{sleep, Duration};
+
+#[cfg(target_os = "windows")]
+use std::ptr;
+#[cfg(target_os = "windows")]
+use std::ffi::OsString;
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStringExt;
+
+#[cfg(target_os = "windows")]
+use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+#[cfg(target_os = "windows")]
+use winapi::um::processthreadsapi::OpenProcess;
+#[cfg(target_os = "windows")]
+use winapi::um::psapi::GetModuleBaseNameW;
+#[cfg(target_os = "windows")]
+use winapi::um::handleapi::CloseHandle;
+#[cfg(target_os = "windows")]
+use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessInfo {
@@ -97,10 +115,11 @@ pub async fn collect_system_context() -> SystemContext {
     }
 }
 
-// macOS: 通过 osascript 尝试获取前台应用与窗口标题（需要权限时自动降级为空）
+/// 获取活跃窗口信息（跨平台支持）
 async fn get_active_window_info() -> Option<ActiveWindowInfo> {
     #[cfg(target_os = "macos")]
     {
+        use std::process::Command;
         let app_name = Command::new("/usr/bin/osascript")
             .args([
                 "-e",
@@ -150,7 +169,66 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.is_null() {
+                return None;
+            }
+
+            // 获取窗口标题
+            let mut window_title_buf = [0u16; 512];
+            let title_len = GetWindowTextW(hwnd, window_title_buf.as_mut_ptr(), window_title_buf.len() as i32);
+            let window_title = if title_len > 0 {
+                let title_slice = &window_title_buf[..title_len as usize];
+                Some(OsString::from_wide(title_slice).to_string_lossy().into_owned())
+            } else {
+                None
+            };
+
+            // 获取进程 ID 和应用程序名称
+            let mut process_id = 0;
+            GetWindowThreadProcessId(hwnd, &mut process_id);
+            
+            let app_name = if process_id != 0 {
+                let process_handle = OpenProcess(PROCESS_QUERY_INFORMATION, 0, process_id);
+                if !process_handle.is_null() {
+                    let mut app_name_buf = [0u16; 512];
+                    let name_len = GetModuleBaseNameW(
+                        process_handle,
+                        ptr::null_mut(),
+                        app_name_buf.as_mut_ptr(),
+                        app_name_buf.len() as u32,
+                    );
+                    CloseHandle(process_handle);
+                    
+                    if name_len > 0 {
+                        let name_slice = &app_name_buf[..name_len as usize];
+                        Some(OsString::from_wide(name_slice).to_string_lossy().into_owned())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // 如果没有获取到任何信息，返回None；否则返回获取到的信息
+            if app_name.is_none() && window_title.is_none() {
+                None
+            } else {
+                Some(ActiveWindowInfo {
+                    app_name,
+                    window_title,
+                })
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         None
     }

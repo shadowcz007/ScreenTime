@@ -1,12 +1,12 @@
 use rmcp::{
-    ErrorData as McpError, RoleServer, ServerHandler,
+    ErrorData as McpError, ServerHandler,
     handler::server::tool::Parameters,
     handler::server::router::tool::ToolRouter,
     model::*,
     tool, tool_handler, tool_router, schemars,
 };
 use std::future::Future;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::sync::{broadcast, Mutex};
 use chrono::{DateTime, Local, NaiveDateTime};
 use std::sync::Arc;
