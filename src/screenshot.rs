@@ -3,7 +3,7 @@ use screenshots::Screen;
 use std::error::Error;
 use std::fs::File;
 
-pub fn capture_screenshot(file_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn capture_screenshot(file_path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     // 获取主屏幕
     let screens = Screen::all()?;
     if let Some(screen) = screens.first() {

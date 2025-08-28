@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-pub fn save_activity_log(log: &ActivityLog, file_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn save_activity_log(log: &ActivityLog, file_path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     // 读取现有日志
     let mut logs: Vec<ActivityLog> = if Path::new(file_path).exists() {
         let file = File::open(file_path)?;
@@ -25,7 +25,7 @@ pub fn save_activity_log(log: &ActivityLog, file_path: &str) -> Result<(), Box<d
 }
 
 /// 读取活动日志文件
-pub fn load_activity_logs(file_path: &str) -> Result<Vec<ActivityLog>, Box<dyn Error>> {
+pub fn load_activity_logs(file_path: &str) -> Result<Vec<ActivityLog>, Box<dyn Error + Send + Sync>> {
     if !Path::new(file_path).exists() {
         return Ok(Vec::new());
     }
@@ -36,7 +36,7 @@ pub fn load_activity_logs(file_path: &str) -> Result<Vec<ActivityLog>, Box<dyn E
 }
 
 /// 获取最近N条活动日志的timestamp和description，用于AI分析的上下文
-pub fn get_recent_activity_context(file_path: &str, count: usize) -> Result<String, Box<dyn Error>> {
+pub fn get_recent_activity_context(file_path: &str, count: usize) -> Result<String, Box<dyn Error + Send + Sync>> {
     let logs = load_activity_logs(file_path)?;
     
     if logs.is_empty() {

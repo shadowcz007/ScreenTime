@@ -9,7 +9,7 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time::{interval, sleep};
 
-pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
+pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + Sync>> {
     println!("启动后5秒开始第一次截屏...");
     
     // 等待5秒后开始第一次截屏

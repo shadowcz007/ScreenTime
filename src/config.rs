@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 pub struct Config {
     /// SiliconFlow API key (or set SILICONFLOW_API_KEY environment variable)
@@ -52,6 +52,10 @@ pub struct Config {
         env = "ACTIVITY_LOG_PATH"
     )]
     pub log_path: PathBuf,
+
+    /// Enable MCP server mode
+    #[clap(long, help = "启用MCP服务器模式")]
+    pub mcp: bool,
 }
 
 impl Config {

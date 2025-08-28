@@ -113,7 +113,7 @@ pub fn open_permission_settings(permission_type: &str) -> Result<(), Box<dyn Err
 }
 
 /// 显示权限请求提示并引导用户
-pub fn prompt_for_permissions(status: &PermissionStatus) -> Result<(), Box<dyn Error>> {
+pub fn prompt_for_permissions(status: &PermissionStatus) -> Result<(), Box<dyn Error + Send + Sync>> {
     if status.all_granted() {
         println!("✅ 所有权限已授权，可以正常使用！");
         return Ok(());
@@ -164,7 +164,7 @@ pub fn prompt_for_permissions(status: &PermissionStatus) -> Result<(), Box<dyn E
 }
 
 /// 等待用户授权后重新检查权限
-pub fn wait_for_permissions() -> Result<PermissionStatus, Box<dyn Error>> {
+pub fn wait_for_permissions() -> Result<PermissionStatus, Box<dyn Error + Send + Sync>> {
     println!("\n按回车键重新检查权限，或输入 'q' 退出程序...");
     
     let mut input = String::new();
@@ -186,7 +186,7 @@ pub fn wait_for_permissions() -> Result<PermissionStatus, Box<dyn Error>> {
 }
 
 /// 完整的权限检查和请求流程
-pub async fn ensure_permissions() -> Result<PermissionStatus, Box<dyn Error>> {
+pub async fn ensure_permissions() -> Result<PermissionStatus, Box<dyn Error + Send + Sync>> {
     let status = check_all_permissions();
     
     if status.has_missing_permissions() {

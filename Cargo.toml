@@ -16,3 +16,9 @@ clap = { version = "4.0", features = ["derive", "env"] }
 sysinfo = "0.30"
 whoami = "1.5"
 get_if_addrs = "0.5"
+axum = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio-util = "0.7"
+rmcp = { version = "0.6.0", features = ["server", "transport-sse-server"] }
+tower-http = { version = "0.5", features = ["cors"] }

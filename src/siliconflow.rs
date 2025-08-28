@@ -52,7 +52,7 @@ pub async fn analyze_screenshot_with_prompt(
     prompt: &str,
     extra_context: Option<&str>, // 系统上下文
     activity_history: Option<&str>, // 新增：用户活动历史
-) -> Result<String, Box<dyn Error>> {
+) -> Result<String, Box<dyn Error + Send + Sync>> {
     let client = reqwest::Client::new();
     let url = "https://api.siliconflow.cn/v1/chat/completions";
     
