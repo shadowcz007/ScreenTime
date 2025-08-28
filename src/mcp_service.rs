@@ -42,6 +42,12 @@ pub struct ScreenTimeService {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct MonitorArgs {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ReadLogsArgs {
     #[serde(skip_serializing_if = "Option::is_none")] pub start_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")] pub end_time: Option<String>,
@@ -58,58 +64,51 @@ impl ScreenTimeService {
         }
     }
 
-    #[tool(description = "开始监控")]
-    async fn start_monitoring(&self) -> Result<CallToolResult, McpError> {
-        let mut state = self.state.lock().await;
-        match state.status {
-            CaptureStatus::Running => Ok(CallToolResult::success(vec![Content::text("already running")])),
-            _ => {
-                let (tx, _) = broadcast::channel(1);
-                let mut rx = tx.subscribe();
-                let config = state.config.clone();
-                state.cancel_sender = Some(tx.clone());
-                state.status = CaptureStatus::Running;
-                tokio::spawn(async move {
-                    tokio::select! {
-                        r = capture::run_capture_loop(config) => {
-                            if let Err(e) = r { eprintln!("monitor error: {}", e); }
-                        }
-                        _ = rx.recv() => {}
+    #[tool(description = "监控控制工具 - action参数: start(开始), stop(停止), status(查询状态)")]
+    async fn monitor(&self, Parameters(args): Parameters<MonitorArgs>) -> Result<CallToolResult, McpError> {
+        let action = args.action.as_deref().unwrap_or("status");
+        
+        match action {
+            "start" => {
+                let mut state = self.state.lock().await;
+                match state.status {
+                    CaptureStatus::Running => Ok(CallToolResult::success(vec![Content::text("already running")])),
+                    _ => {
+                        let (tx, _) = broadcast::channel(1);
+                        let mut rx = tx.subscribe();
+                        let config = state.config.clone();
+                        state.cancel_sender = Some(tx.clone());
+                        state.status = CaptureStatus::Running;
+                        tokio::spawn(async move {
+                            tokio::select! {
+                                r = capture::run_capture_loop(config) => {
+                                    if let Err(e) = r { eprintln!("monitor error: {}", e); }
+                                }
+                                _ = rx.recv() => {}
+                            }
+                        });
+                        Ok(CallToolResult::success(vec![Content::text("started")]))
                     }
-                });
-                Ok(CallToolResult::success(vec![Content::text("started")]))
-            }
-        }
-    }
-
-    #[tool(description = "暂停监控")]
-    async fn pause_monitoring(&self) -> Result<CallToolResult, McpError> {
-        let mut state = self.state.lock().await;
-        match state.status {
-            CaptureStatus::Running => {
+                }
+            },
+            "stop" => {
+                let mut state = self.state.lock().await;
                 if let Some(tx) = &state.cancel_sender { let _ = tx.send(()); }
                 state.cancel_sender = None;
-                state.status = CaptureStatus::Paused;
-                Ok(CallToolResult::success(vec![Content::text("paused")]))
-            }
-            _ => Ok(CallToolResult::success(vec![Content::text("not running")])),
+                state.status = CaptureStatus::Stopped;
+                Ok(CallToolResult::success(vec![Content::text("stopped")]))
+            },
+            "status" => {
+                let state = self.state.lock().await;
+                let s = match state.status { 
+                    CaptureStatus::Running => "running", 
+                    CaptureStatus::Paused => "paused", 
+                    CaptureStatus::Stopped => "stopped" 
+                };
+                Ok(CallToolResult::success(vec![Content::text(s)]))
+            },
+            _ => Ok(CallToolResult::success(vec![Content::text("invalid action, use: start, stop, status")])),
         }
-    }
-
-    #[tool(description = "停止监控")]
-    async fn stop_monitoring(&self) -> Result<CallToolResult, McpError> {
-        let mut state = self.state.lock().await;
-        if let Some(tx) = &state.cancel_sender { let _ = tx.send(()); }
-        state.cancel_sender = None;
-        state.status = CaptureStatus::Stopped;
-        Ok(CallToolResult::success(vec![Content::text("stopped")]))
-    }
-
-    #[tool(description = "查询监控状态")]
-    async fn get_status(&self) -> Result<CallToolResult, McpError> {
-        let state = self.state.lock().await;
-        let s = match state.status { CaptureStatus::Running => "running", CaptureStatus::Paused => "paused", CaptureStatus::Stopped => "stopped" };
-        Ok(CallToolResult::success(vec![Content::text(s)]))
     }
 
     #[tool(description = "读取活动日志（时间范围、数量、详情）")]
@@ -151,7 +150,7 @@ impl ServerHandler for ScreenTimeService {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation::from_build_env(),
-            instructions: Some("ScreenTime MCP server: tools=start_monitoring, pause_monitoring, stop_monitoring, get_status, read_logs".to_string()),
+            instructions: Some("ScreenTime MCP server: tools=monitor, read_logs".to_string()),
         }
     }
 }
