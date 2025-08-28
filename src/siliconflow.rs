@@ -50,6 +50,7 @@ pub async fn analyze_screenshot_with_prompt(
     model: &str,
     image_path: &str,
     prompt: &str,
+    extra_context: Option<&str>, // 新增
 ) -> Result<String, Box<dyn Error>> {
     let client = reqwest::Client::new();
     let url = "https://api.siliconflow.cn/v1/chat/completions";
@@ -60,24 +61,33 @@ pub async fn analyze_screenshot_with_prompt(
     let image_url = format!("data:image/png;base64,{}", base64_image);
     
     // 构建请求体
+    let mut contents = vec![
+        Content {
+            content_type: "text".to_string(),
+            text: Some(prompt.to_string()),
+            image_url: None,
+        }
+    ];
+
+    if let Some(ctx) = extra_context {
+        contents.push(Content {
+            content_type: "text".to_string(),
+            text: Some(format!("以下是当前系统上下文，请结合截图一起分析：\n{}", ctx)),
+            image_url: None,
+        });
+    }
+
+    contents.push(Content {
+        content_type: "image_url".to_string(),
+        text: None,
+        image_url: Some(ImageUrl { url: image_url }),
+    });
+
     let request_body = SiliconFlowRequest {
         model: model.to_string(),
         messages: vec![Message {
             role: "user".to_string(),
-            content: vec![
-                Content {
-                    content_type: "text".to_string(),
-                    text: Some(prompt.to_string()),
-                    image_url: None,
-                },
-                Content {
-                    content_type: "image_url".to_string(),
-                    text: None,
-                    image_url: Some(ImageUrl {
-                        url: image_url,
-                    }),
-                },
-            ],
+            content: contents,
         }],
     };
     

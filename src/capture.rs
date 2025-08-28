@@ -3,6 +3,7 @@ use crate::siliconflow;
 use crate::logger;
 use crate::models::ActivityLog;
 use crate::config::Config;
+use crate::context; // 新增
 use chrono::Local;
 use std::error::Error;
 use std::time::Duration;
@@ -28,11 +29,15 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
             sleep(Duration::from_millis(500)).await;
             
             // 调用SiliconFlow API分析截图
+            let ctx = context::collect_system_context().await;
+            let ctx_text = context::format_context_as_text(&ctx);
+
             match siliconflow::analyze_screenshot_with_prompt(
                 &config.api_key,
                 &config.model,
                 screenshot_path_str,
                 &config.prompt,
+                Some(&ctx_text), // 新增上下文
             ).await {
                 Ok(description) => {
                     println!("第一次分析结果: {}", description);
@@ -41,6 +46,8 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
                     let log = ActivityLog {
                         timestamp,
                         description,
+                        context: Some(ctx), // 记录上下文
+                        screenshot_path: Some(screenshot_path_str.to_string()),
                     };
                     
                     // 保存日志
@@ -79,11 +86,15 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
                 sleep(Duration::from_millis(500)).await;
                 
                 // 调用SiliconFlow API分析截图
+                let ctx = context::collect_system_context().await;
+                let ctx_text = context::format_context_as_text(&ctx);
+
                 match siliconflow::analyze_screenshot_with_prompt(
                     &config.api_key,
                     &config.model,
                     screenshot_path_str,
                     &config.prompt,
+                    Some(&ctx_text), // 新增上下文
                 ).await {
                     Ok(description) => {
                         println!("分析结果: {}", description);
@@ -92,6 +103,8 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
                         let log = ActivityLog {
                             timestamp,
                             description,
+                            context: Some(ctx), // 记录上下文
+                            screenshot_path: Some(screenshot_path_str.to_string()),
                         };
                         
                         // 保存日志

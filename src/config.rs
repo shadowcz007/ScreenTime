@@ -21,7 +21,7 @@ pub struct Config {
     #[clap(
         short,
         long,
-        default_value = "请描述这张截图中用户正在使用什么软件，在做什么，按照格式：【软件】【主要工作摘要】。",
+        default_value = "请描述这张截图中用户正在使用什么软件，在做什么，并进行分类，严格按照格式输出结果：【类型】【软件】【主要工作摘要】。",
         env = "SCREEN_ANALYSIS_PROMPT"
     )]
     pub prompt: String,
