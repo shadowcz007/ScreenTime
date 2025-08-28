@@ -31,13 +31,24 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
             // 调用SiliconFlow API分析截图
             let ctx = context::collect_system_context().await;
             let ctx_text = context::format_context_as_text(&ctx);
+            
+            // 获取历史活动记录（最近5条）
+            let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
+            let activity_history = match logger::get_recent_activity_context(log_path_str, 5) {
+                Ok(history) => Some(history),
+                Err(e) => {
+                    eprintln!("获取历史活动记录时出错: {}", e);
+                    None
+                }
+            };
 
             match siliconflow::analyze_screenshot_with_prompt(
                 &config.api_key,
                 &config.model,
                 screenshot_path_str,
                 &config.prompt,
-                Some(&ctx_text), // 新增上下文
+                Some(&ctx_text), // 系统上下文
+                activity_history.as_deref(), // 用户活动历史
             ).await {
                 Ok(description) => {
                     println!("第一次分析结果: {}", description);
@@ -88,13 +99,24 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error>> {
                 // 调用SiliconFlow API分析截图
                 let ctx = context::collect_system_context().await;
                 let ctx_text = context::format_context_as_text(&ctx);
+                
+                // 获取历史活动记录（最近5条）
+                let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
+                let activity_history = match logger::get_recent_activity_context(log_path_str, 5) {
+                    Ok(history) => Some(history),
+                    Err(e) => {
+                        eprintln!("获取历史活动记录时出错: {}", e);
+                        None
+                    }
+                };
 
                 match siliconflow::analyze_screenshot_with_prompt(
                     &config.api_key,
                     &config.model,
                     screenshot_path_str,
                     &config.prompt,
-                    Some(&ctx_text), // 新增上下文
+                    Some(&ctx_text), // 系统上下文
+                    activity_history.as_deref(), // 用户活动历史
                 ).await {
                     Ok(description) => {
                         println!("分析结果: {}", description);

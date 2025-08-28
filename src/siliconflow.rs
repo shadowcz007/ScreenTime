@@ -50,7 +50,8 @@ pub async fn analyze_screenshot_with_prompt(
     model: &str,
     image_path: &str,
     prompt: &str,
-    extra_context: Option<&str>, // 新增
+    extra_context: Option<&str>, // 系统上下文
+    activity_history: Option<&str>, // 新增：用户活动历史
 ) -> Result<String, Box<dyn Error>> {
     let client = reqwest::Client::new();
     let url = "https://api.siliconflow.cn/v1/chat/completions";
@@ -73,6 +74,14 @@ pub async fn analyze_screenshot_with_prompt(
         contents.push(Content {
             content_type: "text".to_string(),
             text: Some(format!("以下是当前系统上下文，请结合截图一起分析：\n{}", ctx)),
+            image_url: None,
+        });
+    }
+
+    if let Some(history) = activity_history {
+        contents.push(Content {
+            content_type: "text".to_string(),
+            text: Some(format!("{}请参考用户的操作历史，分析当前截图时要考虑操作的连续性和上下文关系。", history)),
             image_url: None,
         });
     }
