@@ -30,7 +30,7 @@
 ### 命令行参数
 
 - `-a, --api-key <API_KEY>`: SiliconFlow API 密钥 [环境变量: SILICONFLOW_API_KEY]
-- `-m, --model <MODEL>`: 用于分析的模型 [默认: Qwen/Qwen2-VL-7B-Instruct] [环境变量: SILICONFLOW_MODEL]
+- `-m, --model <MODEL>`: 用于分析的模型 [默认: THUDM/GLM-4.1V-9B-Thinking] [环境变量: SILICONFLOW_MODEL]
 - `-p, --prompt <PROMPT>`: 用于分析的提示 [默认: 请描述这张图片中用户正在做什么，尽可能详细一些。] [环境变量: SCREEN_ANALYSIS_PROMPT]
 - `-i, --interval <INTERVAL>`: 截图间隔（秒） [默认: 60] [环境变量: SCREENSHOT_INTERVAL_SECONDS]
 - `-s, --screenshot-dir <SCREENSHOT_DIR>`: 截图保存目录 [默认: screenshots] [环境变量: SCREENSHOT_DIRECTORY]
