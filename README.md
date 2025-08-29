@@ -2,6 +2,24 @@
 
 一个功能强大的屏幕时间监控工具，使用 Rust 编写，集成了 AI 图像分析和 MCP (Model Context Protocol) 服务功能。它可以定期截取屏幕截图，使用 SiliconFlow 提供的视觉模型分析用户活动，并提供丰富的系统上下文信息。
 
+## 📋 更新日志
+
+### v0.2.0 (2024-12-19)
+- ✨ **新增**: 支持自定义 SiliconFlow API URL 配置
+  - 添加 `--api-url` 命令行参数
+  - 支持 `SILICONFLOW_API_URL` 环境变量
+  - 保持向后兼容，默认使用官方API端点
+- 🔧 **改进**: 增强配置灵活性，支持私有部署的API服务
+- 📚 **文档**: 更新README文档，添加新功能使用说明
+
+### v0.1.0 (2024-12-18)
+- 🎉 **初始版本**: 基础屏幕时间监控功能
+- 🤖 **AI分析**: 集成SiliconFlow多模态模型
+- 🔗 **MCP服务**: 支持Model Context Protocol
+- 📊 **系统上下文**: 自动收集系统信息
+- 🛡️ **权限管理**: 自动检查和请求必要权限
+- 🧪 **测试功能**: 支持使用新prompt重新分析现有截图
+
 ![](assets\6fdf331f-390c-4493-a29f-eebcd0e393af.png)
 
 ## ✨ 主要功能
@@ -11,8 +29,10 @@
 - **🔗 MCP 服务支持**: 提供 Model Context Protocol 服务，支持远程控制
 - **🛡️ 权限自动检查**: 启动时自动检查并引导用户授权必要权限
 - **📝 完整活动日志**: 记录分析结果、系统状态和截图路径
-- **⚙️ 灵活配置**: 支持命令行参数和环境变量配置
+- **⚙️ 灵活配置**: 支持命令行参数和环境变量配置，包括自定义API端点
 - **🌐 Web 服务**: 内置 SSE (Server-Sent Events) 服务器，支持实时数据推送
+- **🔧 自定义API**: 支持配置自定义SiliconFlow API端点，适用于私有部署
+- **🧪 测试功能**: 支持使用新prompt重新分析现有截图，便于优化分析效果
 
 ## 🚀 快速开始
 
@@ -37,6 +57,9 @@
 # 使用命令行参数
 ./target/release/screen_time --api-key your_api_key_here --interval 30
 
+# 使用自定义API URL
+./target/release/screen_time --api-key your_api_key_here --api-url https://your-custom-endpoint.com/v1/chat/completions
+
 # 使用环境变量
 export SILICONFLOW_API_KEY=your_api_key_here
 ./target/release/screen_time
@@ -53,6 +76,22 @@ MCP 服务器将在 `127.0.0.1:8000` 启动，提供以下工具：
 - `monitor`: 控制监控状态 (start/stop/status)
 - `read_logs`: 读取活动日志
 - `take_screenshot`: 手动截取屏幕截图
+
+#### 3. 测试新Prompt模式
+
+```bash
+# 使用新prompt重新分析现有截图
+./target/release/screen_time \
+  --api-key your_api_key_here \
+  --test-prompt "请详细描述这张截图中用户的工作状态和专注程度" \
+  --test-log-path new_analysis_results.json
+```
+
+这个功能允许您：
+- 使用新的prompt重新分析现有的截图
+- 对比不同prompt的分析效果
+- 优化AI分析的质量和准确性
+- 保存测试结果到指定文件
 
 ## 🔐 权限要求
 
@@ -91,22 +130,47 @@ ScreenTime 需要以下系统权限才能正常工作：
 | 参数 | 环境变量 | 默认值 | 说明 |
 |------|----------|--------|------|
 | `-a, --api-key <API_KEY>` | `SILICONFLOW_API_KEY` | - | SiliconFlow API 密钥 |
+| `--api-url <API_URL>` | `SILICONFLOW_API_URL` | `https://api.siliconflow.cn/v1/chat/completions` | SiliconFlow API URL |
 | `-m, --model <MODEL>` | `SILICONFLOW_MODEL` | `THUDM/GLM-4.1V-9B-Thinking` | 用于分析的模型 |
 | `-p, --prompt <PROMPT>` | `SCREEN_ANALYSIS_PROMPT` | `请描述这张图片中用户正在做什么，尽可能详细一些。` | 用于分析的提示 |
 | `-i, --interval <INTERVAL>` | `SCREENSHOT_INTERVAL_SECONDS` | `60` | 截图间隔（秒） |
 | `-s, --screenshot-dir <SCREENSHOT_DIR>` | `SCREENSHOT_DIRECTORY` | `screenshots` | 截图保存目录 |
 | `-l, --log-path <LOG_PATH>` | `ACTIVITY_LOG_PATH` | `activity_log.json` | 活动日志保存路径 |
 | `--mcp` | - | `false` | 启动 MCP 服务器模式 |
+| `--test-prompt <TEST_PROMPT>` | - | - | 测试新的prompt，使用现有的截图和上下文重新计算 |
+| `--test-log-path <TEST_LOG_PATH>` | `TEST_LOG_PATH` | `test_log.json` | 测试结果保存路径 |
 
 ### 环境变量配置示例
 
 ```bash
 export SILICONFLOW_API_KEY=your_api_key_here
+export SILICONFLOW_API_URL=https://api.siliconflow.cn/v1/chat/completions
 export SILICONFLOW_MODEL=Qwen/Qwen2-VL-7B-Instruct
 export SCREEN_ANALYSIS_PROMPT="请描述这张图片中用户正在做什么，尽可能详细一些。"
 export SCREENSHOT_INTERVAL_SECONDS=60
 export SCREENSHOT_DIRECTORY=screenshots
 export ACTIVITY_LOG_PATH=activity_log.json
+export TEST_LOG_PATH=test_log.json
+```
+
+### 🔧 自定义API端点
+
+ScreenTime 支持配置自定义的 SiliconFlow API 端点，适用于以下场景：
+
+- **私有部署**: 如果您有自己的 SiliconFlow 服务实例
+- **企业环境**: 公司内部的API服务
+- **测试环境**: 开发或测试用的API端点
+
+**使用示例**:
+```bash
+# 使用私有部署的API
+./target/release/screen_time \
+  --api-key your_private_key \
+  --api-url https://your-company.com/siliconflow/v1/chat/completions
+
+# 使用测试环境API
+export SILICONFLOW_API_URL=https://test-api.example.com/v1/chat/completions
+./target/release/screen_time --api-key test_key
 ```
 
 ## 📊 系统上下文收集
@@ -146,7 +210,8 @@ ScreenTime/
 │   ├── capture.rs           # 截屏循环控制
 │   ├── context.rs           # 系统上下文收集
 │   ├── permissions.rs       # 权限检查和请求
-│   └── mcp_service.rs       # MCP 服务实现
+│   ├── mcp_service.rs       # MCP 服务实现
+│   └── test_prompt.rs       # 测试prompt功能
 ├── examples/                # 示例代码
 ├── Cargo.toml              # 项目配置和依赖
 └── README.md               # 项目文档
@@ -229,6 +294,7 @@ ScreenTime/
 4. **系统兼容性**: 支持 macOS 和 Windows 系统，Linux 系统的支持正在开发中
 5. **网络连接**: 需要稳定的网络连接以调用 AI 分析服务
 6. **管理员权限**: Windows 系统可能需要管理员权限来获取完整的窗口信息
+7. **自定义API**: 使用自定义API端点时，请确保端点支持与官方API相同的接口格式
 
 ## 🤝 贡献
 
