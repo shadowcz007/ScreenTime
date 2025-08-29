@@ -44,6 +44,7 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send
 
             match siliconflow::analyze_screenshot_with_prompt(
                 &config.api_key,
+                &config.api_url,
                 &config.model,
                 screenshot_path_str,
                 &config.prompt,
@@ -112,6 +113,7 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send
 
                 match siliconflow::analyze_screenshot_with_prompt(
                     &config.api_key,
+                    &config.api_url,
                     &config.model,
                     screenshot_path_str,
                     &config.prompt,

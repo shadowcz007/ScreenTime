@@ -47,6 +47,7 @@ struct MessageResponse {
 
 pub async fn analyze_screenshot_with_prompt(
     api_key: &str,
+    api_url: &str,
     model: &str,
     image_path: &str,
     prompt: &str,
@@ -54,7 +55,7 @@ pub async fn analyze_screenshot_with_prompt(
     activity_history: Option<&str>, // 新增：用户活动历史
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
     let client = reqwest::Client::new();
-    let url = "https://api.siliconflow.cn/v1/chat/completions";
+    let url = api_url;
     
     // 读取图片文件并编码为base64
     let image_data = tokio::fs::read(image_path).await?;

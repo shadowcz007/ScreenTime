@@ -53,6 +53,7 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
             // 使用新的prompt重新分析截图
             match siliconflow::analyze_screenshot_with_prompt(
                 &config.api_key,
+                &config.api_url,
                 &config.model,
                 screenshot_path,
                 test_prompt,

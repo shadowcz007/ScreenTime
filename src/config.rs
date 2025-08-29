@@ -8,6 +8,14 @@ pub struct Config {
     #[clap(short, long, env = "SILICONFLOW_API_KEY")]
     pub api_key: String,
 
+    /// SiliconFlow API URL (or set SILICONFLOW_API_URL environment variable)
+    #[clap(
+        long,
+        default_value = "https://api.siliconflow.cn/v1/chat/completions",
+        env = "SILICONFLOW_API_URL"
+    )]
+    pub api_url: String,
+
     /// The model to use for analysis
     #[clap(
         short,
