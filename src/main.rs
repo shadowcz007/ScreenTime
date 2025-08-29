@@ -7,6 +7,7 @@ mod config;
 mod context; // 新增
 mod permissions; // 新增权限模块
 mod mcp_service; // MCP服务模块
+mod test_prompt; // 新增测试prompt模块
 
 use std::error::Error;
 
@@ -19,6 +20,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     println!("🚀 ScreenTime 启动中...\n");
     
     let config = config::Config::from_args();
+    
+    // 检查是否为测试prompt模式
+    if let Some(_) = &config.test_prompt {
+        println!("🧪 启动测试prompt模式");
+        return test_prompt::run_test_prompt(config).await;
+    }
     
     if config.mcp {
         // MCP 服务器模式

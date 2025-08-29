@@ -1,0 +1,1 @@
+请描述这张截图中用户正在使用什么软件[软件名称]，在做什么[动宾结构]，并进行分类[深度工作 (Deep Work)​​、​​沟通协作 (Communication)​​、​​学习与研究 (Learning & Research)​​、​​行政与管理 (Administration)​、​​消费与娱乐 (Consumption & Entertainment)​​、​​未工作/中断 (Non-Work & Breaks)​]，严格按照格式输出结果，例如：[深度工作]:[Cursor]-[打开ScreenTime项目在研究README文件]，格式要求：[分类]:[软件]-[在做什么]

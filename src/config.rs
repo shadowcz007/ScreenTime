@@ -56,6 +56,18 @@ pub struct Config {
     /// Enable MCP server mode
     #[clap(long, help = "启用MCP服务器模式")]
     pub mcp: bool,
+
+    /// Test a new prompt using existing screenshots and context
+    #[clap(long, help = "测试新的prompt，使用现有的截图和上下文重新计算")]
+    pub test_prompt: Option<String>,
+
+    /// Path to save test results
+    #[clap(
+        long,
+        default_value = "test_log.json",
+        env = "TEST_LOG_PATH"
+    )]
+    pub test_log_path: PathBuf,
 }
 
 impl Config {

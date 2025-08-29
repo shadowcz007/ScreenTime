@@ -26,6 +26,3 @@ tower-http = { version = "0.5", features = ["cors"] }
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "processthreadsapi", "psapi", "winbase"] }
 
-[[bin]]
-name = "test_windows_compatibility"
-path = "test_windows_compatibility.rs"
