@@ -88,6 +88,15 @@ pub struct Config {
     #[clap(long, help = "启用MCP服务器模式")]
     pub mcp: bool,
 
+    /// MCP server port number
+    #[clap(
+        long,
+        default_value = "6672",
+        env = "MCP_PORT",
+        help = "MCP服务器端口号"
+    )]
+    pub mcp_port: u16,
+
     /// Test a new prompt using existing screenshots and context
     #[clap(long, help = "测试新的prompt，使用现有的截图和上下文重新计算")]
     pub test_prompt: Option<String>,

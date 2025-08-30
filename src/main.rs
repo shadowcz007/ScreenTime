@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Send + Sync>> {
-    const BIND_ADDRESS: &str = "127.0.0.1:8000";
+    let bind_address = format!("127.0.0.1:{}", config.mcp_port);
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
@@ -66,13 +66,13 @@ async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Se
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    println!("🌐 启动 MCP SSE 服务器，地址: {}", BIND_ADDRESS);
+    println!("🌐 启动 MCP SSE 服务器，地址: {}", bind_address);
 
     // 确保必要的目录存在
     tokio::fs::create_dir_all(&config.screenshot_dir).await?;
 
     let server_config = SseServerConfig {
-        bind: BIND_ADDRESS.parse()?,
+        bind: bind_address.parse()?,
         sse_path: "/sse".to_string(),
         post_path: "/message".to_string(),
         ct: tokio_util::sync::CancellationToken::new(),
