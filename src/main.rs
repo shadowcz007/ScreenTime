@@ -55,7 +55,7 @@ async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Se
     println!("🌐 启动 MCP SSE 服务器，地址: {}", bind_address);
 
     // 确保必要的目录存在
-    tokio::fs::create_dir_all(&config.screenshot_dir).await?;
+    tokio::fs::create_dir_all(&config.get_screenshot_dir()).await?;
     
     // 检查独立服务是否已启动，如果没有则自动启动
     let service_controller = ServiceController::new(&config);
@@ -145,8 +145,8 @@ async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Er
     println!("📋 配置信息:");
     println!("  - 监控间隔: {} 秒", config.interval);
     println!("  - 使用模型: {}", config.model);
-    println!("  - 截图目录: {:?}", config.screenshot_dir);
-    println!("  - 日志路径: {:?}", config.log_path);
+    println!("  - 截图目录: {:?}", config.get_screenshot_dir());
+    println!("  - 日志目录: {:?}", config.get_logs_dir());
     println!("  - 状态文件: {:?}", config.get_state_path());
     println!("  - Socket路径: {:?}", config.get_socket_path());
     println!("  - 图片处理:");
@@ -155,7 +155,7 @@ async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Er
     println!();
     
     // 确保必要的目录存在
-    tokio::fs::create_dir_all(&config.screenshot_dir).await?;
+    tokio::fs::create_dir_all(&config.get_screenshot_dir()).await?;
     
     // 创建并启动独立服务
     let service = StandaloneService::new(config).await?;
@@ -172,7 +172,7 @@ async fn start_standalone_service_background(config: config::Config) -> Result<(
     let _permission_status = permissions::ensure_permissions().await?;
     
     // 确保必要的目录存在
-    tokio::fs::create_dir_all(&config.screenshot_dir).await?;
+    tokio::fs::create_dir_all(&config.get_screenshot_dir()).await?;
     
     // 创建并启动独立服务
     let service = StandaloneService::new(config).await?;

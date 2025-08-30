@@ -4,6 +4,13 @@
 
 ## 📋 更新日志
 
+### v0.3.0 (2024-12-19)
+- 🔧 **重大重构**: 配置简化优化，移除复杂的路径配置参数
+- 💰 **新增**: Token使用统计功能，实时显示AI分析的token消耗
+- 📅 **优化**: 日志系统按日期分类存储，扩展日志结构支持模型和token信息
+- 🗂️ **统一**: 采用标准数据目录结构，简化用户配置体验
+- 🚮 **移除**: 向后兼容代码，采用约定大于配置的设计理念
+
 ### v0.2.2 (2024-12-19)
 - 🖼️ **新增**: 智能图片处理系统
   - **专门的图片处理功能**: 自动将截图转换为灰度图，减少颜色信息干扰
@@ -35,12 +42,15 @@
 ## ✨ 主要功能
 
 - **🤖 AI 智能分析**: 使用多模态模型分析截图内容，理解用户活动
+- **💰 Token 使用统计**: 实时显示AI分析的token消耗，包含输入、输出和总token数量
 - **🖼️ 智能图片处理**: 自动灰度转换、智能缩放、高质量算法，优化AI分析效果
 - **📊 丰富系统上下文**: 自动收集系统信息、进程状态、窗口信息、网络接口等
+- **🗂️ 统一数据管理**: 采用标准目录结构，所有数据统一存储管理
+- **📅 按日期分类日志**: 日志文件按天分别保存，便于数据管理和分析
 - **🔗 MCP 服务支持**: 提供 Model Context Protocol 服务，支持远程控制
 - **🛡️ 权限自动检查**: 启动时自动检查并引导用户授权必要权限
-- **📝 完整活动日志**: 记录分析结果、系统状态和截图路径
-- **⚙️ 灵活配置**: 支持命令行参数和环境变量配置，包括自定义API端点和图片处理参数
+- **📝 完整活动日志**: 记录分析结果、系统状态、截图路径、模型信息和token使用
+- **⚙️ 简化配置**: 约定大于配置，只需设置数据根目录即可
 - **🌐 Web 服务**: 内置 SSE (Server-Sent Events) 服务器，支持实时数据推送
 - **🔧 自定义API**: 支持配置自定义API端点，包括SiliconFlow和Ollama等本地模型
 - **🧪 测试功能**: 支持使用新prompt重新分析现有截图，便于优化分析效果
@@ -65,21 +75,38 @@
 #### 1. 标准监控模式
 
 ```bash
-# 使用命令行参数
-./target/release/screen_time --api-key your_api_key_here --interval 30
+# 基本使用（使用默认数据目录）
+./target/release/screen_time --api-key your_api_key_here
+
+# 自定义数据目录
+./target/release/screen_time --api-key your_api_key_here --data-dir /path/to/your/data
 
 # 使用自定义API URL
 ./target/release/screen_time --api-key your_api_key_here --api-url https://your-custom-endpoint.com/v1/chat/completions
 
 # 使用环境变量
 export SILICONFLOW_API_KEY=your_api_key_here
+export SCREENTIME_DATA_DIR=/path/to/your/data
 ./target/release/screen_time
 
 # 使用 Ollama 本地模型
 ./target/release/screen_time \
   --api-key ollama \
   --api-url "http://localhost:11434/v1/chat/completions" \
-  --model "llava:7b"
+  --model "llava:7b" \
+  --data-dir /path/to/ollama/data
+```
+
+**数据目录结构**（自动创建）：
+```
+你的数据目录/
+├── screenshots/              # 截图文件
+├── logs/                    # 按日期分类的日志
+│   ├── 2024-01-01.json
+│   ├── 2024-01-02.json
+│   └── ...
+├── service_state.json       # 服务状态
+└── service.sock            # 服务控制Socket
 ```
 
 #### 2. MCP 服务器模式

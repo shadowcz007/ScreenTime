@@ -99,9 +99,10 @@ impl ScreenTimeService {
         let limit = args.limit.unwrap_or(50).max(0) as usize;
         let detailed = args.detailed.unwrap_or(false);
 
-        let log_path = match self.config.log_path.to_str() { Some(p) => p.to_string(), None => return Ok(CallToolResult::success(vec![Content::text("invalid log path")])) };
-
-        let logs = match logger::load_activity_logs(&log_path) { Ok(v) => v, Err(e) => return Ok(CallToolResult::success(vec![Content::text(format!("read logs error: {}", e))])) };
+        let logs = match logger::load_recent_daily_logs(&self.config, 30) {
+            Ok(v) => v,
+            Err(e) => return Ok(CallToolResult::success(vec![Content::text(format!("read logs error: {}", e))]))
+        };
 
         let filtered: Vec<&ActivityLog> = logs.iter().filter(|log| {
             if let Some(ref s) = args.start_time { if let Ok(st) = parse_datetime(s) { if log.timestamp < st { return false; } } }

@@ -3,13 +3,28 @@ use crate::siliconflow;
 use crate::logger;
 use crate::models::{ActivityLog, SystemContext, SystemInfo};
 use crate::config::Config;
-use crate::context; // 新增
+use crate::context;
+use std::fs;
+use std::path::PathBuf;
 use crate::service_state::ServiceStateManager;
 use chrono::Local;
 use std::error::Error;
 use std::time::Duration;
 use std::sync::Arc;
 use tokio::time::{interval, sleep};
+
+/// 生成截图路径并确保目录存在
+fn generate_screenshot_path(config: &Config, timestamp: &chrono::DateTime<chrono::Local>) -> Result<PathBuf, std::io::Error> {
+    let screenshot_dir = config.get_screenshot_dir();
+    
+    // 确保截图目录存在
+    if !screenshot_dir.exists() {
+        fs::create_dir_all(&screenshot_dir)?;
+    }
+    
+    let screenshot_path = screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
+    Ok(screenshot_path)
+}
 
 /// 原有的截屏循环（已废弃，保留用于内部使用）
 async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -20,7 +35,13 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
     
     // 执行第一次截屏
     let timestamp = Local::now();
-    let screenshot_path = config.screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
+    let screenshot_path = match generate_screenshot_path(&config, &timestamp) {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("创建截图目录失败: {}", e);
+            return Err(Box::new(e));
+        }
+    };
     let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
     
     // 确定图片处理参数
@@ -57,8 +78,7 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
             let ctx = convert_context_to_models(&ctx_original);
             
             // 获取历史活动记录（最近5条）
-            let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-            let activity_history = match logger::get_recent_activity_context(log_path_str, 5) {
+            let activity_history = match logger::get_recent_activity_context(&config, 5) {
                 Ok(history) => Some(history),
                 Err(e) => {
                     eprintln!("获取历史活动记录时出错: {}", e);
@@ -75,20 +95,27 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
                 Some(&ctx_text), // 系统上下文
                 activity_history.as_deref(), // 用户活动历史
             ).await {
-                Ok(description) => {
-                    println!("第一次分析结果: {}", description);
+                Ok(analysis_result) => {
+                    println!("第一次分析结果: {}", analysis_result.description);
+                    if let Some(ref token_usage) = analysis_result.token_usage {
+                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                            token_usage.prompt_tokens, 
+                            token_usage.completion_tokens, 
+                            token_usage.total_tokens);
+                    }
                     
                     // 创建活动日志
                     let log = ActivityLog {
                         timestamp,
-                        description,
+                        description: analysis_result.description,
                         context: Some(ctx), // 记录上下文
                         screenshot_path: Some(screenshot_path_str.to_string()),
+                        model: Some(config.model.clone()),
+                        token_usage: analysis_result.token_usage,
                     };
                     
                     // 保存日志
-                    let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-                    match logger::save_activity_log(&log, log_path_str) {
+                    match logger::save_activity_log(&log, &config) {
                         Ok(_) => println!("第一次日志已保存"),
                         Err(e) => eprintln!("保存日志时出错: {}", e),
                     }
@@ -110,7 +137,13 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
         
         // 生成文件名
         let timestamp = Local::now();
-        let screenshot_path = config.screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
+        let screenshot_path = match generate_screenshot_path(&config, &timestamp) {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("创建截图目录失败: {}", e);
+                continue;
+            }
+        };
         let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
         
             // 获取当前活跃窗口信息，用于智能选择屏幕
@@ -137,8 +170,7 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
                 let ctx = convert_context_to_models(&ctx_original);
                 
                 // 获取历史活动记录（最近5条）
-                let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-                let activity_history = match logger::get_recent_activity_context(log_path_str, 5) {
+                let activity_history = match logger::get_recent_activity_context(&config, 5) {
                     Ok(history) => Some(history),
                     Err(e) => {
                         eprintln!("获取历史活动记录时出错: {}", e);
@@ -155,20 +187,27 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
                     Some(&ctx_text), // 系统上下文
                     activity_history.as_deref(), // 用户活动历史
                 ).await {
-                    Ok(description) => {
-                        println!("分析结果: {}", description);
+                    Ok(analysis_result) => {
+                        println!("分析结果: {}", analysis_result.description);
+                        if let Some(ref token_usage) = analysis_result.token_usage {
+                            println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                                token_usage.prompt_tokens, 
+                                token_usage.completion_tokens, 
+                                token_usage.total_tokens);
+                        }
                         
                         // 创建活动日志
                         let log = ActivityLog {
                             timestamp,
-                            description,
+                            description: analysis_result.description,
                             context: Some(ctx), // 记录上下文
                             screenshot_path: Some(screenshot_path_str.to_string()),
+                            model: Some(config.model.clone()),
+                            token_usage: analysis_result.token_usage,
                         };
                         
                         // 保存日志
-                        let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-                        match logger::save_activity_log(&log, log_path_str) {
+                        match logger::save_activity_log(&log, &config) {
                             Ok(_) => println!("日志已保存"),
                             Err(e) => eprintln!("保存日志时出错: {}", e),
                         }
@@ -189,7 +228,7 @@ pub async fn run_capture_loop_with_state(
     println!("🚀 启动带状态管理的截屏循环...");
     
     // 确保截图目录存在
-    tokio::fs::create_dir_all(&config.screenshot_dir).await?;
+    tokio::fs::create_dir_all(&config.get_screenshot_dir()).await?;
     
     // 等待5秒后开始第一次截屏
     println!("启动后5秒开始第一次截屏...");
@@ -239,7 +278,13 @@ async fn perform_capture(
     state_manager: &Arc<ServiceStateManager>
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let timestamp = Local::now();
-    let screenshot_path = config.screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
+    let screenshot_path = match generate_screenshot_path(config, &timestamp) {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("创建截图目录失败: {}", e);
+            return Err(Box::new(e));
+        }
+    };
     let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
     
     // 确定图片处理参数
@@ -275,8 +320,7 @@ async fn perform_capture(
     let ctx = convert_context_to_models(&ctx_original);
     
     // 获取历史活动记录（最近5条）
-    let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-    let activity_history = match logger::get_recent_activity_context(log_path_str, 5) {
+    let activity_history = match logger::get_recent_activity_context(config, 5) {
         Ok(history) => Some(history),
         Err(e) => {
             eprintln!("获取历史活动记录时出错: {}", e);
@@ -293,20 +337,27 @@ async fn perform_capture(
         Some(&ctx_text), // 系统上下文
         activity_history.as_deref(), // 用户活动历史
     ).await {
-        Ok(description) => {
-            println!("🔍 分析结果: {}", description);
+        Ok(analysis_result) => {
+            println!("🔍 分析结果: {}", analysis_result.description);
+            if let Some(ref token_usage) = analysis_result.token_usage {
+                println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                    token_usage.prompt_tokens, 
+                    token_usage.completion_tokens, 
+                    token_usage.total_tokens);
+            }
             
             // 创建活动日志
             let log = ActivityLog {
                 timestamp,
-                description,
+                description: analysis_result.description,
                 context: Some(ctx), // 记录上下文
                 screenshot_path: Some(screenshot_path_str.to_string()),
+                model: Some(config.model.clone()),
+                token_usage: analysis_result.token_usage,
             };
             
             // 保存日志
-            let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-            match logger::save_activity_log(&log, log_path_str) {
+            match logger::save_activity_log(&log, config) {
                 Ok(_) => println!("💾 日志已保存"),
                 Err(e) => eprintln!("保存日志时出错: {}", e),
             }

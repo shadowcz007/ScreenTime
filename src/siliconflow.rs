@@ -2,6 +2,7 @@ use base64::{Engine as _, engine::general_purpose};
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use crate::models::TokenUsage;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SiliconFlowRequest {
@@ -33,6 +34,14 @@ struct ImageUrl {
 #[derive(Serialize, Deserialize, Debug)]
 struct SiliconFlowResponse {
     choices: Option<Vec<Choice>>,
+    usage: Option<Usage>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Usage {
+    prompt_tokens: Option<u32>,
+    completion_tokens: Option<u32>,
+    total_tokens: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -45,6 +54,13 @@ struct MessageResponse {
     content: String,
 }
 
+/// 分析结果，包含描述和token使用信息
+#[derive(Debug)]
+pub struct AnalysisResult {
+    pub description: String,
+    pub token_usage: Option<TokenUsage>,
+}
+
 pub async fn analyze_screenshot_with_prompt(
     api_key: &str,
     api_url: &str,
@@ -53,7 +69,7 @@ pub async fn analyze_screenshot_with_prompt(
     prompt: &str,
     extra_context: Option<&str>, // 系统上下文
     activity_history: Option<&str>, // 新增：用户活动历史
-) -> Result<String, Box<dyn Error + Send + Sync>> {
+) -> Result<AnalysisResult, Box<dyn Error + Send + Sync>> {
     let client = reqwest::Client::new();
     let url = api_url;
     
@@ -125,12 +141,27 @@ pub async fn analyze_screenshot_with_prompt(
     match siliconflow_response {
         Ok(response) => {
             // 提取描述文本
-            if let Some(choices) = response.choices {
+            let description = if let Some(choices) = response.choices {
                 if let Some(choice) = choices.first() {
-                    return Ok(choice.message.content.clone());
+                    choice.message.content.clone()
+                } else {
+                    "无法分析截图内容".to_string()
                 }
-            }
-            Ok("无法分析截图内容".to_string())
+            } else {
+                "无法分析截图内容".to_string()
+            };
+
+            // 提取token使用信息
+            let token_usage = response.usage.map(|usage| TokenUsage {
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                total_tokens: usage.total_tokens,
+            });
+
+            Ok(AnalysisResult {
+                description,
+                token_usage,
+            })
         },
         Err(e) => {
             eprintln!("解析API响应时出错: {}", e);

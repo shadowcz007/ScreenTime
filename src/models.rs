@@ -7,6 +7,20 @@ pub struct ActivityLog {
     pub description: String,
     pub context: Option<SystemContext>,
     pub screenshot_path: Option<String>,
+    /// AI分析使用的模型名称
+    pub model: Option<String>,
+    /// 消耗的token数量
+    pub token_usage: Option<TokenUsage>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TokenUsage {
+    /// 输入token数量
+    pub prompt_tokens: Option<u32>,
+    /// 输出token数量
+    pub completion_tokens: Option<u32>,
+    /// 总token数量
+    pub total_tokens: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

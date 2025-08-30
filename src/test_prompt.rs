@@ -13,13 +13,12 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
     
     println!("🧪 开始测试新prompt...");
     println!("📝 测试prompt: {}", test_prompt);
-    println!("📊 使用日志文件: {:?}", config.log_path);
+    println!("📊 使用日志目录: {:?}", config.get_logs_dir());
     println!("💾 测试结果保存到: {:?}", config.test_log_path);
     println!();
 
-    // 读取现有的活动日志
-    let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-    let existing_logs = logger::load_activity_logs(log_path_str)?;
+    // 读取最近30天的日志
+    let existing_logs = logger::load_recent_daily_logs(&config, 30)?;
     
     if existing_logs.is_empty() {
         return Err("没有找到现有的活动日志，无法进行测试".into());
@@ -60,15 +59,23 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
                 original_log.context.as_ref().map(|ctx| convert_models_to_context(ctx)).as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
                 Some(&history_context),
             ).await {
-                Ok(new_description) => {
-                    println!("✅ 重新分析完成: {}", new_description.lines().next().unwrap_or("无描述"));
+                Ok(analysis_result) => {
+                    println!("✅ 重新分析完成: {}", analysis_result.description.lines().next().unwrap_or("无描述"));
+                    if let Some(ref token_usage) = analysis_result.token_usage {
+                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                            token_usage.prompt_tokens, 
+                            token_usage.completion_tokens, 
+                            token_usage.total_tokens);
+                    }
 
                     // 创建新的测试日志条目
                     let test_log = ActivityLog {
                         timestamp: original_log.timestamp,
-                        description: new_description,
+                        description: analysis_result.description,
                         context: original_log.context.clone(),
                         screenshot_path: original_log.screenshot_path.clone(),
+                        model: Some(config.model.clone()),
+                        token_usage: analysis_result.token_usage,
                     };
 
                     // 立即保存到测试日志文件

@@ -41,21 +41,13 @@ pub struct Config {
     )]
     pub interval: u64,
 
-    /// Directory to save screenshots
+    /// Data directory for all ScreenTime files (logs, screenshots, etc.)
     #[clap(
-        short, long,
-        default_value = "screenshots",
-        env = "SCREENSHOT_DIRECTORY"
+        long,
+        env = "SCREENTIME_DATA_DIR",
+        help = "数据存储根目录，包含日志、截图等所有文件"
     )]
-    pub screenshot_dir: PathBuf,
-
-    /// Path to save activity log
-    #[clap(
-        short, long,
-        default_value = "activity_log.json",
-        env = "ACTIVITY_LOG_PATH"
-    )]
-    pub log_path: PathBuf,
+    pub data_dir: Option<PathBuf>,
 
     /// Path to save service state
     #[clap(
@@ -132,12 +124,19 @@ impl Config {
         Self::parse()
     }
 
-    /// 获取系统数据目录
-    pub fn get_data_dir() -> PathBuf {
+    /// 获取数据存储根目录
+    pub fn get_data_dir(&self) -> PathBuf {
+        // 优先使用命令行或环境变量指定的目录
+        if let Some(ref dir) = self.data_dir {
+            return dir.clone();
+        }
+
+        // 使用环境变量
         if let Some(dir) = env::var_os("SCREENTIME_DATA_DIR") {
             return PathBuf::from(dir);
         }
 
+        // 使用系统默认目录
         #[cfg(target_os = "macos")]
         {
             let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -159,13 +158,28 @@ impl Config {
         }
     }
 
+    /// 获取截图保存目录
+    pub fn get_screenshot_dir(&self) -> PathBuf {
+        self.get_data_dir().join("screenshots")
+    }
+
+    /// 获取按日期分类的日志目录
+    pub fn get_logs_dir(&self) -> PathBuf {
+        self.get_data_dir().join("logs")
+    }
+
+    /// 获取指定日期的日志文件路径
+    pub fn get_daily_log_path(&self, date: &str) -> PathBuf {
+        self.get_logs_dir().join(format!("{}.json", date))
+    }
+
     /// 获取状态文件路径
     pub fn get_state_path(&self) -> PathBuf {
         if let Some(path) = &self.state_path {
             return path.clone();
         }
         
-        let data_dir = Self::get_data_dir();
+        let data_dir = self.get_data_dir();
         data_dir.join("service_state.json")
     }
 
@@ -175,7 +189,7 @@ impl Config {
             return path.clone();
         }
         
-        let data_dir = Self::get_data_dir();
+        let data_dir = self.get_data_dir();
         data_dir.join("service.sock")
     }
 
