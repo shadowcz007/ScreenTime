@@ -43,6 +43,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     println!("  - 使用模型: {}", config.model);
     println!("  - 截图目录: {:?}", config.screenshot_dir);
     println!("  - 日志路径: {:?}", config.log_path);
+    println!("  - 图片处理:");
+    println!("    * 目标宽度: {}", if config.image_target_width > 0 { config.image_target_width.to_string() } else { "保持原图".to_string() });
+    println!("    * 灰度转换: {}", if config.image_grayscale && !config.no_image_grayscale { "启用" } else { "禁用" });
     println!();
     
     // 确保截图目录存在

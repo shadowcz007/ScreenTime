@@ -20,8 +20,18 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send
     let screenshot_path = config.screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
     let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
     
+    // 确定图片处理参数
+    let target_width = if config.image_target_width > 0 {
+        Some(config.image_target_width)
+    } else {
+        None
+    };
+    
+    // 确定是否启用灰度转换
+    let grayscale = config.image_grayscale && !config.no_image_grayscale;
+    
     // 截屏
-    match screenshot::capture_screenshot(screenshot_path_str) {
+    match screenshot::capture_screenshot_with_options(screenshot_path_str, target_width, grayscale) {
         Ok(_) => {
             println!("第一次截图已保存: {}", screenshot_path_str);
             
@@ -90,7 +100,7 @@ pub async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send
         let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
         
         // 截屏
-        match screenshot::capture_screenshot(screenshot_path_str) {
+        match screenshot::capture_screenshot_with_options(screenshot_path_str, target_width, grayscale) {
             Ok(_) => {
                 println!("截图已保存: {}", screenshot_path_str);
                 

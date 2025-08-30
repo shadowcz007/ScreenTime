@@ -18,8 +18,7 @@ pub struct Config {
 
     /// The model to use for analysis
     #[clap(
-        short,
-        long,
+        short, long,
         default_value = "THUDM/GLM-4.1V-9B-Thinking",
         env = "SILICONFLOW_MODEL"
     )]
@@ -27,8 +26,7 @@ pub struct Config {
 
     /// The prompt to use for analysis
     #[clap(
-        short,
-        long,
+        short, long,
         default_value = "请描述这张截图中用户正在使用什么软件，在做什么，并进行分类，严格按照格式输出结果：【类型】【软件】【主要工作摘要】。",
         env = "SCREEN_ANALYSIS_PROMPT"
     )]
@@ -36,8 +34,7 @@ pub struct Config {
 
     /// The interval between screenshots in seconds
     #[clap(
-        short,
-        long,
+        short, long,
         default_value = "60",
         env = "SCREENSHOT_INTERVAL_SECONDS"
     )]
@@ -45,8 +42,7 @@ pub struct Config {
 
     /// Directory to save screenshots
     #[clap(
-        short,
-        long,
+        short, long,
         default_value = "screenshots",
         env = "SCREENSHOT_DIRECTORY"
     )]
@@ -54,12 +50,39 @@ pub struct Config {
 
     /// Path to save activity log
     #[clap(
-        short,
-        long,
+        short, long,
         default_value = "activity_log.json",
         env = "ACTIVITY_LOG_PATH"
     )]
     pub log_path: PathBuf,
+
+    /// Target width for image processing (None to keep original size)
+    #[clap(
+        long,
+        default_value = "1440",
+        env = "IMAGE_TARGET_WIDTH",
+        help = "图片处理的目标宽度，设置为0保持原图尺寸"
+    )]
+    pub image_target_width: u32,
+
+    /// Enable grayscale conversion for image processing
+    #[clap(
+        long,
+        default_value = "true",
+        env = "IMAGE_GRAYSCALE",
+        help = "是否将图片转换为灰度图",
+        action = clap::ArgAction::SetTrue,
+        overrides_with = "no_image_grayscale"
+    )]
+    pub image_grayscale: bool,
+
+    /// Disable grayscale conversion for image processing
+    #[clap(
+        long,
+        help = "禁用灰度转换，保持彩色图片",
+        action = clap::ArgAction::SetTrue
+    )]
+    pub no_image_grayscale: bool,
 
     /// Enable MCP server mode
     #[clap(long, help = "启用MCP服务器模式")]

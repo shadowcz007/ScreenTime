@@ -4,6 +4,16 @@
 
 ## 📋 更新日志
 
+### v0.2.2 (2024-12-19)
+- 🖼️ **新增**: 智能图片处理系统
+  - **专门的图片处理功能**: 自动将截图转换为灰度图，减少颜色信息干扰
+  - **智能缩放**: 支持自定义目标宽度，默认1440像素，保持原始宽高比
+  - **高质量算法**: 使用Lanczos3算法进行缩放，确保图片质量
+  - **参数化控制**: 添加 `--image-target-width` 和 `--image-grayscale` 命令行参数
+  - **灵活配置**: 支持设置为0保持原图尺寸，支持环境变量配置
+  - **性能优化**: 减少图片文件大小，提高AI分析效率和API响应速度
+- 🔧 **改进**: 图片处理流程完全重构，支持参数化控制，提升整体分析性能
+
 ### v0.2.0 (2024-12-19)
 - ✨ **新增**: 支持自定义 SiliconFlow API URL 配置
   - 添加 `--api-url` 命令行参数
@@ -25,13 +35,14 @@
 ## ✨ 主要功能
 
 - **🤖 AI 智能分析**: 使用多模态模型分析截图内容，理解用户活动
+- **🖼️ 智能图片处理**: 自动灰度转换、智能缩放、高质量算法，优化AI分析效果
 - **📊 丰富系统上下文**: 自动收集系统信息、进程状态、窗口信息、网络接口等
 - **🔗 MCP 服务支持**: 提供 Model Context Protocol 服务，支持远程控制
 - **🛡️ 权限自动检查**: 启动时自动检查并引导用户授权必要权限
 - **📝 完整活动日志**: 记录分析结果、系统状态和截图路径
-- **⚙️ 灵活配置**: 支持命令行参数和环境变量配置，包括自定义API端点
+- **⚙️ 灵活配置**: 支持命令行参数和环境变量配置，包括自定义API端点和图片处理参数
 - **🌐 Web 服务**: 内置 SSE (Server-Sent Events) 服务器，支持实时数据推送
-- **🔧 自定义API**: 支持配置自定义SiliconFlow API端点，适用于私有部署
+- **🔧 自定义API**: 支持配置自定义API端点，包括SiliconFlow和Ollama等本地模型
 - **🧪 测试功能**: 支持使用新prompt重新分析现有截图，便于优化分析效果
 
 ## 🚀 快速开始
@@ -63,6 +74,12 @@
 # 使用环境变量
 export SILICONFLOW_API_KEY=your_api_key_here
 ./target/release/screen_time
+
+# 使用 Ollama 本地模型
+./target/release/screen_time \
+  --api-key ollama \
+  --api-url "http://localhost:11434/v1/chat/completions" \
+  --model "llava:7b"
 ```
 
 #### 2. MCP 服务器模式
@@ -92,6 +109,73 @@ MCP 服务器将在 `127.0.0.1:8000` 启动，提供以下工具：
 - 对比不同prompt的分析效果
 - 优化AI分析的质量和准确性
 - 保存测试结果到指定文件
+
+#### 4. 图片处理配置示例
+
+```bash
+# 使用默认设置（宽度1440，灰度转换）
+./target/release/screen_time --api-key your_key
+
+# 自定义宽度，保持灰度转换
+./target/release/screen_time --api-key your_key --image-target-width 1024
+
+# 保持原图尺寸，启用灰度转换
+./target/release/screen_time --api-key your_key --image-target-width 0
+
+# 自定义宽度，禁用灰度转换（保持彩色）
+./target/release/screen_time --api-key your_key --image-target-width 800 --no-image-grayscale
+
+# 使用环境变量配置图片处理
+export IMAGE_TARGET_WIDTH=1200
+export IMAGE_GRAYSCALE=false
+./target/release/screen_time --api-key your_key
+```
+
+**图片处理功能说明**:
+- **灰度转换**: 默认启用，减少颜色信息干扰，提高AI分析准确性
+- **智能缩放**: 默认宽度1440像素，保持原始宽高比，使用高质量Lanczos3算法
+- **灵活配置**: 支持设置为0保持原图尺寸，支持完全禁用灰度转换
+- **性能优化**: 减少图片文件大小，提高传输和分析效率
+
+#### 5. Ollama 本地模型支持
+
+ScreenTime 支持使用 Ollama 本地大语言模型进行图片分析，无需联网即可使用。
+
+**前置要求**:
+1. 安装并启动 Ollama: https://ollama.ai/
+2. 拉取支持视觉的模型，如 `llava:7b`:
+   ```bash
+   ollama pull llava:7b
+   ```
+
+**使用示例**:
+```bash
+# 基本使用
+./target/release/screen_time \
+  --api-key ollama \
+  --api-url "http://localhost:11434/v1/chat/completions" \
+  --model "llava:7b"
+
+# 使用环境变量
+export SILICONFLOW_API_KEY=ollama
+export SILICONFLOW_API_URL=http://localhost:11434/v1/chat/completions
+export SILICONFLOW_MODEL=llava:7b
+./target/release/screen_time
+
+# 结合图片处理参数
+./target/release/screen_time \
+  --api-key ollama \
+  --api-url "http://localhost:11434/v1/chat/completions" \
+  --model "llava:7b" \
+  --image-target-width 1024 \
+  --no-image-grayscale
+```
+
+**支持的模型**:
+- `llava:7b` - 轻量级视觉语言模型
+- `llava:13b` - 更强大的视觉语言模型
+- `llava:34b` - 最高性能的视觉语言模型
+- 其他支持视觉的 Ollama 模型
 
 ## 🔐 权限要求
 
@@ -136,6 +220,8 @@ ScreenTime 需要以下系统权限才能正常工作：
 | `-i, --interval <INTERVAL>` | `SCREENSHOT_INTERVAL_SECONDS` | `60` | 截图间隔（秒） |
 | `-s, --screenshot-dir <SCREENSHOT_DIR>` | `SCREENSHOT_DIRECTORY` | `screenshots` | 截图保存目录 |
 | `-l, --log-path <LOG_PATH>` | `ACTIVITY_LOG_PATH` | `activity_log.json` | 活动日志保存路径 |
+| `--image-target-width <WIDTH>` | `IMAGE_TARGET_WIDTH` | `1440` | 图片处理的目标宽度，设置为0保持原图尺寸 |
+| `--image-grayscale` | `IMAGE_GRAYSCALE` | `true` | 是否将图片转换为灰度图 |
 | `--mcp` | - | `false` | 启动 MCP 服务器模式 |
 | `--test-prompt <TEST_PROMPT>` | - | - | 测试新的prompt，使用现有的截图和上下文重新计算 |
 | `--test-log-path <TEST_LOG_PATH>` | `TEST_LOG_PATH` | `test_log.json` | 测试结果保存路径 |
@@ -143,23 +229,34 @@ ScreenTime 需要以下系统权限才能正常工作：
 ### 环境变量配置示例
 
 ```bash
+# SiliconFlow API 配置
 export SILICONFLOW_API_KEY=your_api_key_here
 export SILICONFLOW_API_URL=https://api.siliconflow.cn/v1/chat/completions
 export SILICONFLOW_MODEL=Qwen/Qwen2-VL-7B-Instruct
+
+# Ollama 本地模型配置
+export SILICONFLOW_API_KEY=ollama
+export SILICONFLOW_API_URL=http://localhost:11434/v1/chat/completions
+export SILICONFLOW_MODEL=llava:7b
+
+# 其他配置
 export SCREEN_ANALYSIS_PROMPT="请描述这张图片中用户正在做什么，尽可能详细一些。"
 export SCREENSHOT_INTERVAL_SECONDS=60
 export SCREENSHOT_DIRECTORY=screenshots
 export ACTIVITY_LOG_PATH=activity_log.json
+export IMAGE_TARGET_WIDTH=1440
+export IMAGE_GRAYSCALE=true
 export TEST_LOG_PATH=test_log.json
 ```
 
 ### 🔧 自定义API端点
 
-ScreenTime 支持配置自定义的 SiliconFlow API 端点，适用于以下场景：
+ScreenTime 支持配置自定义的 API 端点，适用于以下场景：
 
 - **私有部署**: 如果您有自己的 SiliconFlow 服务实例
 - **企业环境**: 公司内部的API服务
 - **测试环境**: 开发或测试用的API端点
+- **本地模型**: 使用 Ollama 等本地大语言模型服务
 
 **使用示例**:
 ```bash
@@ -171,6 +268,12 @@ ScreenTime 支持配置自定义的 SiliconFlow API 端点，适用于以下场�
 # 使用测试环境API
 export SILICONFLOW_API_URL=https://test-api.example.com/v1/chat/completions
 ./target/release/screen_time --api-key test_key
+
+# 使用 Ollama 本地模型
+./target/release/screen_time \
+  --api-key ollama \
+  --api-url "http://localhost:11434/v1/chat/completions" \
+  --model "llava:7b"
 ```
 
 ## 📊 系统上下文收集
