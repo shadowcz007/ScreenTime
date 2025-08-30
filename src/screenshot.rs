@@ -35,7 +35,7 @@ pub fn process_image_for_analysis(
     processed_image
 }
 
-pub fn capture_screenshot(file_path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+fn capture_screenshot(file_path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     capture_screenshot_with_options(file_path, Some(1440), true)
 }
 

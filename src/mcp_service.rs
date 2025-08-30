@@ -7,37 +7,18 @@ use rmcp::{
 };
 use std::future::Future;
 use serde::Deserialize;
-use tokio::sync::{broadcast, Mutex};
+
 use chrono::{DateTime, Local, NaiveDateTime};
 use std::sync::Arc;
 use crate::logger;
-use crate::models::ActivityLog;
-use crate::capture;
+use crate::models::{ActivityLog, ServiceCommand, CaptureServiceStatus};
+use crate::standalone_service::ServiceController;
 use crate::config::Config;
-
-#[derive(Debug, Clone)]
-pub enum CaptureStatus {
-    Running,
-    Paused,
-    Stopped,
-}
-
-#[derive(Debug, Clone)]
-pub struct CaptureState {
-    pub status: CaptureStatus,
-    pub config: Config,
-    pub cancel_sender: Option<broadcast::Sender<()>>,
-}
-
-impl CaptureState {
-    pub fn new(config: Config) -> Self {
-        Self { status: CaptureStatus::Stopped, config, cancel_sender: None }
-    }
-}
 
 #[derive(Clone)]
 pub struct ScreenTimeService {
-    state: Arc<Mutex<CaptureState>>,
+    config: Config,
+    service_controller: Arc<ServiceController>,
     tool_router: ToolRouter<ScreenTimeService>,
 }
 
@@ -58,8 +39,10 @@ pub struct ReadLogsArgs {
 #[tool_router]
 impl ScreenTimeService {
     pub fn new(config: Config) -> Self {
+        let service_controller = Arc::new(ServiceController::new(&config));
         Self {
-            state: Arc::new(Mutex::new(CaptureState::new(config))),
+            config,
+            service_controller,
             tool_router: Self::tool_router(),
         }
     }
@@ -68,46 +51,46 @@ impl ScreenTimeService {
     async fn monitor(&self, Parameters(args): Parameters<MonitorArgs>) -> Result<CallToolResult, McpError> {
         let action = args.action.as_deref().unwrap_or("status");
         
-        match action {
-            "start" => {
-                let mut state = self.state.lock().await;
-                match state.status {
-                    CaptureStatus::Running => Ok(CallToolResult::success(vec![Content::text("already running")])),
-                    _ => {
-                        let (tx, _) = broadcast::channel(1);
-                        let mut rx = tx.subscribe();
-                        let config = state.config.clone();
-                        state.cancel_sender = Some(tx.clone());
-                        state.status = CaptureStatus::Running;
-                        tokio::spawn(async move {
-                            tokio::select! {
-                                r = capture::run_capture_loop(config) => {
-                                    if let Err(e) = r { eprintln!("monitor error: {}", e); }
-                                }
-                                _ = rx.recv() => {}
-                            }
-                        });
-                        Ok(CallToolResult::success(vec![Content::text("started")]))
+        let command = match action {
+            "start" => ServiceCommand::Start,
+            "stop" => ServiceCommand::Stop,
+            "status" => ServiceCommand::Status,
+            _ => return Ok(CallToolResult::success(vec![Content::text("invalid action, use: start, stop, status")])),
+        };
+        
+        match self.service_controller.send_command(command).await {
+            Ok(response) => {
+                let mut message = response.message;
+                
+                if let Some(state) = response.state {
+                    let status_str = match state.status {
+                        CaptureServiceStatus::Running => "running",
+                        CaptureServiceStatus::Stopped => "stopped",
+                    };
+                    
+                    message = format!("{}\n状态: {}\n总截屏数: {}", 
+                        message, status_str, state.total_captures);
+                    
+                    if let Some(last_start) = state.last_start_time {
+                        message = format!("{}\n最后启动: {}", message, last_start.format("%Y-%m-%d %H:%M:%S"));
+                    }
+                    
+                    if let Some(last_capture) = state.last_capture_time {
+                        message = format!("{}\n最后截屏: {}", message, last_capture.format("%Y-%m-%d %H:%M:%S"));
                     }
                 }
-            },
-            "stop" => {
-                let mut state = self.state.lock().await;
-                if let Some(tx) = &state.cancel_sender { let _ = tx.send(()); }
-                state.cancel_sender = None;
-                state.status = CaptureStatus::Stopped;
-                Ok(CallToolResult::success(vec![Content::text("stopped")]))
-            },
-            "status" => {
-                let state = self.state.lock().await;
-                let s = match state.status { 
-                    CaptureStatus::Running => "running", 
-                    CaptureStatus::Paused => "paused", 
-                    CaptureStatus::Stopped => "stopped" 
+                
+                Ok(CallToolResult::success(vec![Content::text(message)]))
+            }
+            Err(e) => {
+                let error_msg = if e.to_string().contains("No such file or directory") || 
+                                   e.to_string().contains("Connection refused") {
+                    "截屏服务未运行，请先启动独立服务模式"
+                } else {
+                    &format!("服务通信错误: {}", e)
                 };
-                Ok(CallToolResult::success(vec![Content::text(s)]))
-            },
-            _ => Ok(CallToolResult::success(vec![Content::text("invalid action, use: start, stop, status")])),
+                Ok(CallToolResult::success(vec![Content::text(error_msg)]))
+            }
         }
     }
 
@@ -116,9 +99,7 @@ impl ScreenTimeService {
         let limit = args.limit.unwrap_or(50).max(0) as usize;
         let detailed = args.detailed.unwrap_or(false);
 
-        let state = self.state.lock().await;
-        let log_path = match state.config.log_path.to_str() { Some(p) => p.to_string(), None => return Ok(CallToolResult::success(vec![Content::text("invalid log path")])) };
-        drop(state);
+        let log_path = match self.config.log_path.to_str() { Some(p) => p.to_string(), None => return Ok(CallToolResult::success(vec![Content::text("invalid log path")])) };
 
         let logs = match logger::load_activity_logs(&log_path) { Ok(v) => v, Err(e) => return Ok(CallToolResult::success(vec![Content::text(format!("read logs error: {}", e))])) };
 

@@ -1,6 +1,6 @@
 use crate::siliconflow;
 use crate::logger;
-use crate::models::ActivityLog;
+use crate::models::{ActivityLog, SystemContext};
 use crate::config::Config;
 use crate::context;
 use std::error::Error;
@@ -57,7 +57,7 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
                 &config.model,
                 screenshot_path,
                 test_prompt,
-                original_log.context.as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
+                original_log.context.as_ref().map(|ctx| convert_models_to_context(ctx)).as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
                 Some(&history_context),
             ).await {
                 Ok(new_description) => {
@@ -208,4 +208,28 @@ fn show_comparison_summary(original: &[ActivityLog], test: &[ActivityLog]) -> Re
     println!("  长度变化: {:.1}%", ((test_avg_length - original_avg_length) / original_avg_length * 100.0));
     
     Ok(())
+}
+
+/// 将models模块的SystemContext转换为context模块的SystemContext
+fn convert_models_to_context(ctx: &SystemContext) -> context::SystemContext {
+    context::SystemContext {
+        username: ctx.system_info.as_ref()
+            .and_then(|info| info.username.clone())
+            .unwrap_or_else(|| "unknown".to_string()),
+        hostname: ctx.system_info.as_ref().and_then(|info| info.hostname.clone()),
+        os_name: ctx.system_info.as_ref().and_then(|info| info.platform.clone()),
+        os_version: None,
+        kernel_version: None,
+        uptime_secs: 0,
+        used_memory_mb: 0,
+        total_memory_mb: 0,
+        processes_top: Vec::new(),
+        active_window: ctx.active_app.as_ref().or(ctx.window_title.as_ref()).map(|_| {
+            context::ActiveWindowInfo {
+                app_name: ctx.active_app.clone(),
+                window_title: ctx.window_title.clone(),
+            }
+        }),
+        interfaces: Vec::new(),
+    }
 }
