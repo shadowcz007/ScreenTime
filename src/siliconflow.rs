@@ -82,7 +82,7 @@ pub async fn analyze_screenshot_with_prompt(
     if let Some(history) = activity_history {
         contents.push(Content {
             content_type: "text".to_string(),
-            text: Some(format!("{}请参考用户的操作历史，分析当前截图时要考虑操作的连续性和上下文关系。", history)),
+            text: Some(format!("{}以下是用户最近的活动历史，仅供参考。请独立分析当前截图，当前行为可能与历史活动相关，也可能完全无关。", history)),
             image_url: None,
         });
     }
