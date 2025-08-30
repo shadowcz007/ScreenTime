@@ -228,6 +228,7 @@ fn convert_models_to_context(ctx: &SystemContext) -> context::SystemContext {
             context::ActiveWindowInfo {
                 app_name: ctx.active_app.clone(),
                 window_title: ctx.window_title.clone(),
+                bounds: None, // 测试环境中不需要窗口位置信息
             }
         }),
         interfaces: Vec::new(),

@@ -33,8 +33,16 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
     // 确定是否启用灰度转换
     let grayscale = config.image_grayscale && !config.no_image_grayscale;
     
-    // 截屏
-    match screenshot::capture_screenshot_with_options(screenshot_path_str, target_width, grayscale) {
+    // 获取当前活跃窗口信息，用于智能选择屏幕
+    let ctx_for_screenshot = context::collect_system_context().await;
+    
+    // 截屏 - 使用智能截图功能
+    match screenshot::capture_screenshot_smart(
+        screenshot_path_str, 
+        target_width, 
+        grayscale, 
+        ctx_for_screenshot.active_window.as_ref()
+    ) {
         Ok(_) => {
             println!("第一次截图已保存: {}", screenshot_path_str);
             
@@ -105,8 +113,16 @@ async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + S
         let screenshot_path = config.screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
         let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
         
-        // 截屏
-        match screenshot::capture_screenshot_with_options(screenshot_path_str, target_width, grayscale) {
+            // 获取当前活跃窗口信息，用于智能选择屏幕
+    let ctx_for_screenshot = context::collect_system_context().await;
+    
+    // 截屏 - 使用智能截图功能
+    match screenshot::capture_screenshot_smart(
+        screenshot_path_str, 
+        target_width, 
+        grayscale, 
+        ctx_for_screenshot.active_window.as_ref()
+    ) {
             Ok(_) => {
                 println!("截图已保存: {}", screenshot_path_str);
                 
@@ -236,8 +252,16 @@ async fn perform_capture(
     // 确定是否启用灰度转换
     let grayscale = config.image_grayscale && !config.no_image_grayscale;
     
-    // 截屏
-    screenshot::capture_screenshot_with_options(screenshot_path_str, target_width, grayscale)?;
+    // 获取当前活跃窗口信息，用于智能选择屏幕
+    let ctx_for_screenshot = context::collect_system_context().await;
+    
+    // 截屏 - 使用智能截图功能
+    screenshot::capture_screenshot_smart(
+        screenshot_path_str, 
+        target_width, 
+        grayscale, 
+        ctx_for_screenshot.active_window.as_ref()
+    )?;
     println!("📷 截图已保存: {}", screenshot_path_str);
     
     // 等待一段时间确保文件写入完成

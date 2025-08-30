@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 
 #[cfg(target_os = "windows")]
-use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+use winapi::um::winuser::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId, GetWindowRect};
 #[cfg(target_os = "windows")]
 use winapi::um::processthreadsapi::OpenProcess;
 #[cfg(target_os = "windows")]
@@ -20,6 +20,8 @@ use winapi::um::psapi::GetModuleBaseNameW;
 use winapi::um::handleapi::CloseHandle;
 #[cfg(target_os = "windows")]
 use winapi::um::winnt::PROCESS_QUERY_INFORMATION;
+#[cfg(target_os = "windows")]
+use winapi::shared::windef::RECT;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessInfo {
@@ -32,6 +34,15 @@ pub struct ProcessInfo {
 pub struct ActiveWindowInfo {
     pub app_name: Option<String>,
     pub window_title: Option<String>,
+    pub bounds: Option<WindowBounds>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WindowBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -158,6 +169,46 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
             None
         };
 
+        // 获取窗口位置和大小
+        let bounds = if app_name.is_some() {
+            Command::new("/usr/bin/osascript")
+                .args([
+                    "-e",
+                    r#"tell application "System Events" to tell (first process whose frontmost is true) to get position of front window"#,
+                ])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok()
+                    } else {
+                        None
+                    }
+                })
+                .and_then(|pos_str| {
+                    // 获取窗口大小
+                    Command::new("/usr/bin/osascript")
+                        .args([
+                            "-e",
+                            r#"tell application "System Events" to tell (first process whose frontmost is true) to get size of front window"#,
+                        ])
+                        .output()
+                        .ok()
+                        .and_then(|o| {
+                            if o.status.success() {
+                                String::from_utf8(o.stdout).ok()
+                            } else {
+                                None
+                            }
+                        })
+                        .and_then(|size_str| {
+                            parse_window_bounds(&pos_str.trim(), &size_str.trim())
+                        })
+                })
+        } else {
+            None
+        };
+
         // 如果没有获取到任何信息，返回None；否则返回获取到的信息
         if app_name.is_none() && window_title.is_none() {
             None
@@ -165,6 +216,7 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
             Some(ActiveWindowInfo {
                 app_name,
                 window_title,
+                bounds,
             })
         }
     }
@@ -216,6 +268,24 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
                 None
             };
 
+            // 获取窗口位置和大小
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            let bounds = if GetWindowRect(hwnd, &mut rect) != 0 {
+                Some(WindowBounds {
+                    x: rect.left,
+                    y: rect.top,
+                    width: rect.right - rect.left,
+                    height: rect.bottom - rect.top,
+                })
+            } else {
+                None
+            };
+
             // 如果没有获取到任何信息，返回None；否则返回获取到的信息
             if app_name.is_none() && window_title.is_none() {
                 None
@@ -223,6 +293,7 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
                 Some(ActiveWindowInfo {
                     app_name,
                     window_title,
+                    bounds,
                 })
             }
         }
@@ -276,4 +347,24 @@ pub fn format_context_as_text(ctx: &SystemContext) -> String {
     }
 
     s
+}
+
+/// 解析macOS AppleScript返回的窗口位置和大小字符串
+fn parse_window_bounds(position_str: &str, size_str: &str) -> Option<WindowBounds> {
+    // AppleScript返回的格式通常是 "x, y" 和 "width, height"
+    let parse_coords = |s: &str| -> Option<(i32, i32)> {
+        let parts: Vec<&str> = s.split(',').map(|s| s.trim()).collect();
+        if parts.len() == 2 {
+            if let (Ok(first), Ok(second)) = (parts[0].parse::<i32>(), parts[1].parse::<i32>()) {
+                return Some((first, second));
+            }
+        }
+        None
+    };
+    
+    if let (Some((x, y)), Some((width, height))) = (parse_coords(position_str), parse_coords(size_str)) {
+        Some(WindowBounds { x, y, width, height })
+    } else {
+        None
+    }
 }
