@@ -243,15 +243,19 @@ ScreenTime 需要以下系统权限才能正常工作：
 | `-a, --api-key <API_KEY>` | `SILICONFLOW_API_KEY` | - | SiliconFlow API 密钥 |
 | `--api-url <API_URL>` | `SILICONFLOW_API_URL` | `https://api.siliconflow.cn/v1/chat/completions` | SiliconFlow API URL |
 | `-m, --model <MODEL>` | `SILICONFLOW_MODEL` | `THUDM/GLM-4.1V-9B-Thinking` | 用于分析的模型 |
-| `-p, --prompt <PROMPT>` | `SCREEN_ANALYSIS_PROMPT` | `请描述这张图片中用户正在做什么，尽可能详细一些。` | 用于分析的提示 |
+| `-p, --prompt <PROMPT>` | `SCREEN_ANALYSIS_PROMPT` | `请描述这张截图中用户正在使用什么软件，在做什么...` | 用于分析的提示 |
 | `-i, --interval <INTERVAL>` | `SCREENSHOT_INTERVAL_SECONDS` | `60` | 截图间隔（秒） |
-| `-s, --screenshot-dir <SCREENSHOT_DIR>` | `SCREENSHOT_DIRECTORY` | `screenshots` | 截图保存目录 |
-| `-l, --log-path <LOG_PATH>` | `ACTIVITY_LOG_PATH` | `activity_log.json` | 活动日志保存路径 |
+| `--data-dir <DATA_DIR>` | `SCREENTIME_DATA_DIR` | 系统默认目录* | 数据存储根目录 |
 | `--image-target-width <WIDTH>` | `IMAGE_TARGET_WIDTH` | `1440` | 图片处理的目标宽度，设置为0保持原图尺寸 |
 | `--image-grayscale` | `IMAGE_GRAYSCALE` | `true` | 是否将图片转换为灰度图 |
 | `--mcp` | - | `false` | 启动 MCP 服务器模式 |
 | `--test-prompt <TEST_PROMPT>` | - | - | 测试新的prompt，使用现有的截图和上下文重新计算 |
 | `--test-log-path <TEST_LOG_PATH>` | `TEST_LOG_PATH` | `test_log.json` | 测试结果保存路径 |
+
+**系统默认目录**:
+- macOS: `~/Library/Application Support/ScreenTime/`
+- Linux: `~/.local/share/screentime/`  
+- Windows: `%APPDATA%/ScreenTime/`
 
 ### 环境变量配置示例
 
@@ -267,10 +271,9 @@ export SILICONFLOW_API_URL=http://localhost:11434/v1/chat/completions
 export SILICONFLOW_MODEL=llava:7b
 
 # 其他配置
-export SCREEN_ANALYSIS_PROMPT="请描述这张图片中用户正在做什么，尽可能详细一些。"
+export SCREEN_ANALYSIS_PROMPT="请描述这张截图中用户正在使用什么软件，在做什么，并进行分类，严格按照格式输出结果：【类型】【软件】【主要工作摘要】。"
 export SCREENSHOT_INTERVAL_SECONDS=60
-export SCREENSHOT_DIRECTORY=screenshots
-export ACTIVITY_LOG_PATH=activity_log.json
+export SCREENTIME_DATA_DIR=/path/to/your/data
 export IMAGE_TARGET_WIDTH=1440
 export IMAGE_GRAYSCALE=true
 export TEST_LOG_PATH=test_log.json
@@ -332,19 +335,33 @@ ScreenTime 会自动收集以下系统信息，为 AI 分析提供更丰富的�
 ScreenTime/
 ├── src/
 │   ├── main.rs              # 程序入口点
-│   ├── config.rs            # 配置解析
+│   ├── config.rs            # 配置解析（简化版）
 │   ├── screenshot.rs        # 屏幕截图功能
-│   ├── siliconflow.rs       # SiliconFlow API 调用
-│   ├── logger.rs            # 日志记录功能
-│   ├── models.rs            # 数据模型定义
+│   ├── siliconflow.rs       # SiliconFlow API 调用（包含token统计）
+│   ├── logger.rs            # 日志记录功能（按日期分类）
+│   ├── models.rs            # 数据模型定义（扩展版）
 │   ├── capture.rs           # 截屏循环控制
 │   ├── context.rs           # 系统上下文收集
 │   ├── permissions.rs       # 权限检查和请求
 │   ├── mcp_service.rs       # MCP 服务实现
+│   ├── service_state.rs     # 服务状态管理
+│   ├── standalone_service.rs # 独立服务实现
 │   └── test_prompt.rs       # 测试prompt功能
 ├── examples/                # 示例代码
 ├── Cargo.toml              # 项目配置和依赖
+├── CHANGELOG.md            # 更新日志
 └── README.md               # 项目文档
+```
+
+**运行时数据目录结构**：
+```
+数据根目录/
+├── screenshots/             # 截图文件（自动创建）
+├── logs/                   # 按日期分类的日志（自动创建）
+│   ├── 2024-01-01.json
+│   └── ...
+├── service_state.json      # 服务状态文件
+└── service.sock           # 服务控制Socket
 ```
 
 ## 🔧 依赖库
@@ -374,12 +391,27 @@ ScreenTime/
 
 ## 📝 日志格式
 
-活动日志以 JSON 格式保存，包含以下信息：
+活动日志以 JSON 格式保存，按日期分类存储在 `logs/` 目录下：
 
+**日志目录结构**:
+```
+logs/
+├── 2024-01-01.json    # 2024年1月1日的所有记录
+├── 2024-01-02.json    # 2024年1月2日的所有记录
+└── ...
+```
+
+**日志条目格式**:
 ```json
 {
   "timestamp": "2024-01-01T12:00:00+08:00",
-  "description": "AI 分析结果描述",
+  "description": "【工作】【VSCode】【正在编辑Rust代码，进行项目开发】",
+  "model": "THUDM/GLM-4.1V-9B-Thinking",
+  "token_usage": {
+    "prompt_tokens": 1024,
+    "completion_tokens": 156,
+    "total_tokens": 1180
+  },
   "context": {
     "username": "用户名",
     "hostname": "主机名",
@@ -389,12 +421,12 @@ ScreenTime/
     "used_memory_mb": 8192,
     "processes_top": [...],
     "active_window": {
-      "app_name": "应用程序名",
-      "window_title": "窗口标题"
+      "app_name": "Visual Studio Code",
+      "window_title": "main.rs - ScreenTime - VSCode"
     },
     "interfaces": [...]
   },
-  "screenshot_path": "screenshots/2024-01-01_12-00-00.png"
+  "screenshot_path": "screenshots/screenshot_20240101_120000.png"
 }
 ```
 
