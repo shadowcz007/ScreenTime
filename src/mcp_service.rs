@@ -111,7 +111,7 @@ impl ScreenTimeService {
         }
     }
 
-    #[tool(description = "读取活动日志（时间范围、数量、详情）")]
+    #[tool(description = "读取活动日志（时间范围、数量、详情，默认不显示详情）")]
     async fn read_logs(&self, Parameters(args): Parameters<ReadLogsArgs>) -> Result<CallToolResult, McpError> {
         let limit = args.limit.unwrap_or(50).max(0) as usize;
         let detailed = args.detailed.unwrap_or(false);
