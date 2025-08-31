@@ -385,10 +385,13 @@ async fn analyze_screenshot_with_retry(
             Ok(analysis_result) => {
                 println!("✅ 分析成功: {}", analysis_result.description);
                 if let Some(ref token_usage) = analysis_result.token_usage {
-                    println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                    println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}, 计算耗时: {:.2}秒", 
                         token_usage.prompt_tokens, 
                         token_usage.completion_tokens, 
-                        token_usage.total_tokens);
+                        token_usage.total_tokens,
+                        analysis_result.processing_time.as_secs_f64());
+                } else {
+                    println!("计算耗时: {:.2}秒", analysis_result.processing_time.as_secs_f64());
                 }
                 return Ok(analysis_result);
             },
