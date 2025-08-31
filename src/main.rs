@@ -10,6 +10,7 @@ mod mcp_service; // MCP服务模块
 mod test_prompt; // 新增测试prompt模块
 mod service_state; // 服务状态管理
 mod standalone_service; // 独立截屏服务
+mod fastvlm_local; // FastVLM本地模型服务
 
 use std::error::Error;
 
@@ -44,6 +45,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // 验证配置
+    if !config.is_using_fastvlm() && config.api_key.is_none() {
+        eprintln!("❌ 错误: 使用API方式时必须提供API密钥");
+        eprintln!("   请使用 --api-key 参数或设置 SILICONFLOW_API_KEY 环境变量");
+        eprintln!("   或者使用 --fastvlm-model-dir 参数启用本地FastVLM模型");
+        std::process::exit(1);
+    }
+    
     let bind_address = format!("127.0.0.1:{}", config.mcp_port);
 
     tracing_subscriber::registry()
@@ -137,6 +146,14 @@ async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Se
 }
 
 async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // 验证配置
+    if !config.is_using_fastvlm() && config.api_key.is_none() {
+        eprintln!("❌ 错误: 使用API方式时必须提供API密钥");
+        eprintln!("   请使用 --api-key 参数或设置 SILICONFLOW_API_KEY 环境变量");
+        eprintln!("   或者使用 --fastvlm-model-dir 参数启用本地FastVLM模型");
+        std::process::exit(1);
+    }
+    
     // 首先检查并请求必要权限
     println!("第一步：权限检查");
     let _permission_status = permissions::ensure_permissions().await?;
@@ -145,6 +162,15 @@ async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Er
     println!("📋 配置信息:");
     println!("  - 监控间隔: {} 秒", config.interval);
     println!("  - 使用模型: {}", config.model);
+    println!("  - 计算方式: {}", 
+        if config.is_using_fastvlm() {
+            format!("本地FastVLM ({})", config.get_fastvlm_model_dir().unwrap().display())
+        } else if config.api_url.contains("siliconflow") {
+            "硅基流动API".to_string()
+        } else {
+            format!("自定义API ({})", config.api_url)
+        }
+    );
     println!("  - 截图目录: {:?}", config.get_screenshot_dir());
     println!("  - 日志目录: {:?}", config.get_logs_dir());
     println!("  - 状态文件: {:?}", config.get_state_path());
@@ -168,6 +194,14 @@ async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Er
 
 /// 在后台启动独立服务
 async fn start_standalone_service_background(config: config::Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // 验证配置
+    if !config.is_using_fastvlm() && config.api_key.is_none() {
+        eprintln!("❌ 错误: 使用API方式时必须提供API密钥");
+        eprintln!("   请使用 --api-key 参数或设置 SILICONFLOW_API_KEY 环境变量");
+        eprintln!("   或者使用 --fastvlm-model-dir 参数启用本地FastVLM模型");
+        return Err("配置验证失败".into());
+    }
+    
     // 首先检查并请求必要权限
     let _permission_status = permissions::ensure_permissions().await?;
     

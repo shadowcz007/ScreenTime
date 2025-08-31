@@ -1,5 +1,6 @@
 use crate::screenshot;
 use crate::siliconflow;
+use crate::fastvlm_local;
 use crate::logger;
 use crate::models::{ActivityLog, SystemContext, SystemInfo};
 use crate::config::Config;
@@ -12,6 +13,42 @@ use std::error::Error;
 use std::time::Duration;
 use std::sync::Arc;
 use tokio::time::{interval, sleep};
+use std::sync::Mutex;
+
+/// 全局FastVLM服务实例
+static FASTVLM_SERVICE: Mutex<Option<Arc<fastvlm_local::FastVLMService>>> = Mutex::new(None);
+
+/// 初始化FastVLM服务（如果配置了本地模型路径）
+pub async fn initialize_fastvlm_if_needed(config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if !config.is_using_fastvlm() {
+        return Ok(());
+    }
+
+    let model_dir = config.get_fastvlm_model_dir().unwrap().clone();
+    
+    // 检查是否已经初始化
+    {
+        let service_guard = FASTVLM_SERVICE.lock().unwrap();
+        if service_guard.is_some() {
+            return Ok(());
+        }
+    }
+
+    println!("🤖 正在初始化FastVLM本地模型服务...");
+    
+    // 创建FastVLM服务
+    let service = fastvlm_local::create_fastvlm_service(model_dir).await?;
+    let service_arc = Arc::new(service);
+    
+    // 保存到全局变量
+    {
+        let mut service_guard = FASTVLM_SERVICE.lock().unwrap();
+        *service_guard = Some(service_arc);
+    }
+
+    println!("✅ FastVLM本地模型服务初始化成功");
+    Ok(())
+}
 
 /// 生成截图路径并确保目录存在
 fn generate_screenshot_path(config: &Config, timestamp: &chrono::DateTime<chrono::Local>) -> Result<PathBuf, std::io::Error> {
@@ -24,200 +61,6 @@ fn generate_screenshot_path(config: &Config, timestamp: &chrono::DateTime<chrono
     
     let screenshot_path = screenshot_dir.join(format!("screenshot_{}.png", timestamp.format("%Y%m%d_%H%M%S")));
     Ok(screenshot_path)
-}
-
-/// 原有的截屏循环（已废弃，保留用于内部使用）
-async fn run_capture_loop(config: Config) -> Result<(), Box<dyn Error + Send + Sync>> {
-    println!("启动后5秒开始第一次截屏...");
-    
-    // 等待5秒后开始第一次截屏
-    sleep(Duration::from_secs(5)).await;
-    
-    // 执行第一次截屏
-    let timestamp = Local::now();
-    let screenshot_path = match generate_screenshot_path(&config, &timestamp) {
-        Ok(path) => path,
-        Err(e) => {
-            eprintln!("创建截图目录失败: {}", e);
-            return Err(Box::new(e));
-        }
-    };
-    let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
-    
-    // 确定图片处理参数
-    let target_width = if config.image_target_width > 0 {
-        Some(config.image_target_width)
-    } else {
-        None
-    };
-    
-    // 确定是否启用灰度转换
-    let grayscale = config.image_grayscale && !config.no_image_grayscale;
-    
-    // 获取当前活跃窗口信息，用于智能选择屏幕
-    let ctx_for_screenshot = context::collect_system_context().await;
-    
-    // 截屏 - 使用智能截图功能
-    match screenshot::capture_screenshot_smart(
-        screenshot_path_str, 
-        target_width, 
-        grayscale, 
-        ctx_for_screenshot.active_window.as_ref()
-    ) {
-        Ok(_) => {
-            println!("第一次截图已保存: {}", screenshot_path_str);
-            
-            // 等待一段时间确保文件写入完成
-            sleep(Duration::from_millis(500)).await;
-            
-            // 调用SiliconFlow API分析截图
-            let ctx_original = context::collect_system_context().await;
-            let ctx_text = context::format_context_as_text(&ctx_original);
-            
-            // 转换context格式到models格式
-            let ctx = convert_context_to_models(&ctx_original);
-            
-            // 获取历史活动记录（最近5条）
-            let activity_history = match logger::get_recent_activity_context(&config, 5) {
-                Ok(history) => Some(history),
-                Err(e) => {
-                    eprintln!("获取历史活动记录时出错: {}", e);
-                    None
-                }
-            };
-
-            match siliconflow::analyze_screenshot_with_prompt(
-                &config.api_key,
-                &config.api_url,
-                &config.model,
-                screenshot_path_str,
-                &config.prompt,
-                Some(&ctx_text), // 系统上下文
-                activity_history.as_deref(), // 用户活动历史
-            ).await {
-                Ok(analysis_result) => {
-                    println!("第一次分析结果: {}", analysis_result.description);
-                    if let Some(ref token_usage) = analysis_result.token_usage {
-                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
-                            token_usage.prompt_tokens, 
-                            token_usage.completion_tokens, 
-                            token_usage.total_tokens);
-                    }
-                    
-                    // 创建活动日志
-                    let log = ActivityLog {
-                        timestamp,
-                        description: analysis_result.description,
-                        context: Some(ctx), // 记录上下文
-                        screenshot_path: Some(screenshot_path_str.to_string()),
-                        model: Some(config.model.clone()),
-                        token_usage: analysis_result.token_usage,
-                    };
-                    
-                    // 保存日志
-                    match logger::save_activity_log(&log, &config) {
-                        Ok(_) => println!("第一次日志已保存"),
-                        Err(e) => eprintln!("保存日志时出错: {}", e),
-                    }
-                },
-                Err(e) => eprintln!("分析截图时出错: {}", e),
-            }
-        },
-        Err(e) => eprintln!("截屏时出错: {}", e),
-    }
-    
-    println!("开始间隔循环，间隔: {} 秒", config.interval);
-    
-    // 开始间隔循环
-    let mut interval_timer = interval(Duration::from_secs(config.interval));
-    
-    loop {
-        // 等待下一个时间点
-        interval_timer.tick().await;
-        
-        // 生成文件名
-        let timestamp = Local::now();
-        let screenshot_path = match generate_screenshot_path(&config, &timestamp) {
-            Ok(path) => path,
-            Err(e) => {
-                eprintln!("创建截图目录失败: {}", e);
-                continue;
-            }
-        };
-        let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
-        
-            // 获取当前活跃窗口信息，用于智能选择屏幕
-    let ctx_for_screenshot = context::collect_system_context().await;
-    
-    // 截屏 - 使用智能截图功能
-    match screenshot::capture_screenshot_smart(
-        screenshot_path_str, 
-        target_width, 
-        grayscale, 
-        ctx_for_screenshot.active_window.as_ref()
-    ) {
-            Ok(_) => {
-                println!("截图已保存: {}", screenshot_path_str);
-                
-                // 等待一段时间确保文件写入完成
-                sleep(Duration::from_millis(500)).await;
-                
-                // 调用SiliconFlow API分析截图
-                let ctx_original = context::collect_system_context().await;
-                let ctx_text = context::format_context_as_text(&ctx_original);
-                
-                // 转换context格式到models格式
-                let ctx = convert_context_to_models(&ctx_original);
-                
-                // 获取历史活动记录（最近5条）
-                let activity_history = match logger::get_recent_activity_context(&config, 5) {
-                    Ok(history) => Some(history),
-                    Err(e) => {
-                        eprintln!("获取历史活动记录时出错: {}", e);
-                        None
-                    }
-                };
-
-                match siliconflow::analyze_screenshot_with_prompt(
-                    &config.api_key,
-                    &config.api_url,
-                    &config.model,
-                    screenshot_path_str,
-                    &config.prompt,
-                    Some(&ctx_text), // 系统上下文
-                    activity_history.as_deref(), // 用户活动历史
-                ).await {
-                    Ok(analysis_result) => {
-                        println!("分析结果: {}", analysis_result.description);
-                        if let Some(ref token_usage) = analysis_result.token_usage {
-                            println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
-                                token_usage.prompt_tokens, 
-                                token_usage.completion_tokens, 
-                                token_usage.total_tokens);
-                        }
-                        
-                        // 创建活动日志
-                        let log = ActivityLog {
-                            timestamp,
-                            description: analysis_result.description,
-                            context: Some(ctx), // 记录上下文
-                            screenshot_path: Some(screenshot_path_str.to_string()),
-                            model: Some(config.model.clone()),
-                            token_usage: analysis_result.token_usage,
-                        };
-                        
-                        // 保存日志
-                        match logger::save_activity_log(&log, &config) {
-                            Ok(_) => println!("日志已保存"),
-                            Err(e) => eprintln!("保存日志时出错: {}", e),
-                        }
-                    },
-                    Err(e) => eprintln!("分析截图时出错: {}", e),
-                }
-            },
-            Err(e) => eprintln!("截屏时出错: {}", e),
-        }
-    }
 }
 
 /// 带状态管理的截屏循环
@@ -312,7 +155,7 @@ async fn perform_capture(
     // 等待一段时间确保文件写入完成
     sleep(Duration::from_millis(500)).await;
     
-    // 调用SiliconFlow API分析截图（带重试机制）
+    // 调用分析API（支持三种计算方式）
     let analysis_result = analyze_screenshot_with_retry(
         config,
         screenshot_path_str,
@@ -346,12 +189,74 @@ async fn perform_capture(
     Ok(())
 }
 
-/// 带重试机制的截图分析
+// 使用models模块中的通用AnalysisResult类型
+use crate::models::AnalysisResult;
+
+/// 带重试机制的截图分析（支持三种计算方式）
 async fn analyze_screenshot_with_retry(
     config: &Config,
     screenshot_path_str: &str,
     _timestamp: &chrono::DateTime<chrono::Local>
-) -> Result<siliconflow::AnalysisResult, Box<dyn Error + Send + Sync>> {
+) -> Result<crate::models::AnalysisResult, Box<dyn Error + Send + Sync>> {
+    // 检查是否使用FastVLM本地模型
+    if config.is_using_fastvlm() {
+        return analyze_with_fastvlm(config, screenshot_path_str).await;
+    }
+    
+    // 使用API方式（硅基流动或自定义URL）
+    analyze_with_api_retry(config, screenshot_path_str).await
+}
+
+/// 使用FastVLM本地模型分析
+async fn analyze_with_fastvlm(
+    config: &Config,
+    screenshot_path_str: &str
+) -> Result<crate::models::AnalysisResult, Box<dyn Error + Send + Sync>> {
+    println!("🤖 使用FastVLM本地模型分析截图...");
+    
+    // 获取FastVLM服务实例
+    let service_opt = {
+        let service_guard = FASTVLM_SERVICE.lock().unwrap();
+        service_guard.clone()
+    };
+    
+    let service = service_opt.ok_or("FastVLM服务未初始化")?;
+    
+    // 获取系统上下文和历史记录
+    let ctx_original = context::collect_system_context().await;
+    let ctx_text = context::format_context_as_text(&ctx_original);
+    
+    let activity_history = match logger::get_recent_activity_context(config, 5) {
+        Ok(history) => Some(history),
+        Err(e) => {
+            eprintln!("获取历史活动记录时出错: {}", e);
+            None
+        }
+    };
+    
+    // 使用FastVLM分析
+    let fastvlm_result = service.analyze_screenshot_with_prompt(
+        screenshot_path_str,
+        &config.prompt,
+        Some(&ctx_text),
+        activity_history.as_deref(),
+    ).await?;
+    
+    println!("✅ FastVLM分析成功: {}", fastvlm_result.description);
+    
+    Ok(crate::models::AnalysisResult {
+        description: fastvlm_result.description,
+        token_usage: fastvlm_result.token_usage,
+    })
+}
+
+/// 使用API方式分析（带重试机制）
+async fn analyze_with_api_retry(
+    config: &Config,
+    screenshot_path_str: &str
+) -> Result<crate::models::AnalysisResult, Box<dyn Error + Send + Sync>> {
+    println!("🌐 使用API方式分析截图 ({})", if config.api_url.contains("siliconflow") { "硅基流动" } else { "自定义API" });
+    
     const MAX_RETRIES: u32 = 3;
     const RETRY_DELAYS: [u64; 3] = [5, 15, 30]; // 重试延迟：5秒、15秒、30秒
     
@@ -373,8 +278,17 @@ async fn analyze_screenshot_with_retry(
     for attempt in 1..=MAX_RETRIES {
         println!("🔍 尝试分析截图 (第 {}/{} 次)", attempt, MAX_RETRIES);
         
+        // 检查API密钥是否存在
+        let api_key = match &config.api_key {
+            Some(key) => key,
+            None => {
+                eprintln!("❌ 使用API方式需要提供API密钥");
+                return Err("API密钥未提供".into());
+            }
+        };
+        
         match siliconflow::analyze_screenshot_with_prompt(
-            &config.api_key,
+            api_key,
             &config.api_url,
             &config.model,
             screenshot_path_str,
@@ -390,7 +304,10 @@ async fn analyze_screenshot_with_retry(
                         token_usage.completion_tokens, 
                         token_usage.total_tokens);
                 }
-                return Ok(analysis_result);
+                return Ok(crate::models::AnalysisResult {
+                    description: analysis_result.description,
+                    token_usage: analysis_result.token_usage,
+                });
             },
             Err(e) => {
                 last_error = Some(e);

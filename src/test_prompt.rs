@@ -8,6 +8,14 @@ use std::fs::File;
 use std::io::BufWriter;
 
 pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // 验证配置
+    if !config.is_using_fastvlm() && config.api_key.is_none() {
+        eprintln!("❌ 错误: 使用API方式时必须提供API密钥");
+        eprintln!("   请使用 --api-key 参数或设置 SILICONFLOW_API_KEY 环境变量");
+        eprintln!("   或者使用 --fastvlm-model-dir 参数启用本地FastVLM模型");
+        std::process::exit(1);
+    }
+    
     let test_prompt = config.test_prompt.as_ref()
         .ok_or("测试prompt不能为空")?;
     
@@ -49,47 +57,76 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
             // 获取历史活动上下文（排除当前记录）
             let history_context = get_history_context_excluding_current(&existing_logs, index, 5)?;
 
-            // 使用新的prompt重新分析截图
-            match siliconflow::analyze_screenshot_with_prompt(
-                &config.api_key,
-                &config.api_url,
-                &config.model,
-                screenshot_path,
-                test_prompt,
-                original_log.context.as_ref().map(|ctx| convert_models_to_context(ctx)).as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
-                Some(&history_context),
-            ).await {
-                Ok(analysis_result) => {
-                    println!("✅ 重新分析完成: {}", analysis_result.description.lines().next().unwrap_or("无描述"));
-                    if let Some(ref token_usage) = analysis_result.token_usage {
-                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
-                            token_usage.prompt_tokens, 
-                            token_usage.completion_tokens, 
-                            token_usage.total_tokens);
+                        // 根据配置选择分析方式
+            let analysis_result = match if config.is_using_fastvlm() {
+                // 使用FastVLM本地模型
+                println!("🤖 使用FastVLM本地模型重新分析...");
+                let fastvlm_service = crate::fastvlm_local::create_fastvlm_service(
+                    config.get_fastvlm_model_dir().unwrap().clone()
+                ).await?;
+                
+                let context_text = original_log.context.as_ref()
+                    .map(|ctx| convert_models_to_context(ctx))
+                    .map(|ctx| context::format_context_as_text(&ctx))
+                    .unwrap_or_default();
+                
+                fastvlm_service.analyze_screenshot_with_prompt(
+                    screenshot_path,
+                    test_prompt,
+                    Some(&context_text),
+                    Some(&history_context),
+                ).await
+            } else {
+                // 使用API方式
+                let api_key = match &config.api_key {
+                    Some(key) => key,
+                    None => {
+                        eprintln!("❌ 使用API方式需要提供API密钥");
+                        return Err("API密钥未提供".into());
                     }
-
-                    // 创建新的测试日志条目
-                    let test_log = ActivityLog {
-                        timestamp: original_log.timestamp,
-                        description: analysis_result.description,
-                        context: original_log.context.clone(),
-                        screenshot_path: original_log.screenshot_path.clone(),
-                        model: Some(config.model.clone()),
-                        token_usage: analysis_result.token_usage,
-                    };
-
-                    // 立即保存到测试日志文件
-                    append_test_result(&test_log, &config.test_log_path)?;
-                    println!("💾 已保存到测试日志");
-                    
-                    success_count += 1;
-                },
+                };
+                
+                siliconflow::analyze_screenshot_with_prompt(
+                    api_key,
+                    &config.api_url,
+                    &config.model,
+                    screenshot_path,
+                    test_prompt,
+                    original_log.context.as_ref().map(|ctx| convert_models_to_context(ctx)).as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
+                    Some(&history_context),
+                ).await
+            } {
+                Ok(result) => result,
                 Err(e) => {
                     eprintln!("❌ 重新分析失败: {}", e);
                     skip_count += 1;
                     continue;
                 }
+            };
+            
+            println!("✅ 重新分析完成: {}", analysis_result.description.lines().next().unwrap_or("无描述"));
+            if let Some(ref token_usage) = analysis_result.token_usage {
+                println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                    token_usage.prompt_tokens, 
+                    token_usage.completion_tokens, 
+                    token_usage.total_tokens);
             }
+
+            // 创建新的测试日志条目
+            let test_log = ActivityLog {
+                timestamp: original_log.timestamp,
+                description: analysis_result.description,
+                context: original_log.context.clone(),
+                screenshot_path: original_log.screenshot_path.clone(),
+                model: Some(config.model.clone()),
+                token_usage: analysis_result.token_usage,
+            };
+
+            // 立即保存到测试日志文件
+            append_test_result(&test_log, &config.test_log_path)?;
+            println!("💾 已保存到测试日志");
+            
+            success_count += 1;
         } else {
             println!("⚠️  记录中没有截图路径，跳过此记录");
             skip_count += 1;

@@ -36,6 +36,12 @@ impl StandaloneService {
     pub async fn start(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         println!("🚀 启动独立截屏服务...");
         
+        // 初始化FastVLM服务（如果配置了本地模型）
+        if let Err(e) = capture::initialize_fastvlm_if_needed(&self.config).await {
+            eprintln!("⚠️ FastVLM初始化失败: {}", e);
+            eprintln!("   将继续使用API方式进行分析");
+        }
+        
         // 检查之前的状态并自动恢复
         let current_state = self.state_manager.get_state().await;
         match current_state.status {
@@ -266,11 +272,6 @@ impl StandaloneService {
         Self::start_capture_task(&self.state_manager, &self.config, &self.capture_handle).await
     }
     
-    /// 停止服务
-    pub async fn shutdown(&self) {
-        let _ = self.shutdown_tx.send(());
-        Self::stop_capture_task(&self.capture_handle).await;
-    }
 }
 
 /// 服务控制客户端

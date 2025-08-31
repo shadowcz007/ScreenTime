@@ -4,6 +4,16 @@
 
 ## 📋 更新日志
 
+### v0.4.0 (2024-12-19)
+- 🚀 **新增**: 本地FastVLM支持
+  - **本地视觉语言模型**: 集成FastVLM本地模型，无需联网即可进行图像分析
+  - **高性能推理**: 使用ONNX运行时，支持CPU和GPU加速
+  - **模型管理**: 自动下载和管理FastVLM模型文件
+  - **灵活配置**: 支持自定义模型路径和推理参数
+  - **隐私保护**: 所有分析在本地完成，保护用户隐私
+- 🔧 **优化**: 改进模型选择逻辑，支持多种AI分析后端
+- 📚 **文档**: 更新使用说明，添加FastVLM配置指南
+
 ### v0.3.0 (2024-12-19)
 - 🔧 **重大重构**: 配置简化优化，移除复杂的路径配置参数
 - 💰 **新增**: Token使用统计功能，实时显示AI分析的token消耗
@@ -42,6 +52,7 @@
 ## ✨ 主要功能
 
 - **🤖 AI 智能分析**: 使用多模态模型分析截图内容，理解用户活动
+- **🚀 本地FastVLM**: 集成本地视觉语言模型，无需联网即可进行图像分析
 - **💰 Token 使用统计**: 实时显示AI分析的token消耗，包含输入、输出和总token数量
 - **🖼️ 智能图片处理**: 自动灰度转换、智能缩放、高质量算法，优化AI分析效果
 - **📊 丰富系统上下文**: 自动收集系统信息、进程状态、窗口信息、网络接口等
@@ -164,7 +175,41 @@ export IMAGE_GRAYSCALE=false
 - **灵活配置**: 支持设置为0保持原图尺寸，支持完全禁用灰度转换
 - **性能优化**: 减少图片文件大小，提高传输和分析效率
 
-#### 5. Ollama 本地模型支持
+#### 5. 本地FastVLM模型支持
+
+ScreenTime 支持使用本地FastVLM视觉语言模型进行图片分析，无需联网即可使用，提供高性能的本地推理能力。
+
+**前置要求**:
+1. 确保系统已安装必要的依赖库
+2. 首次使用时会自动下载FastVLM模型文件（约2GB）
+
+**使用示例**:
+```bash
+# 使用本地FastVLM模型
+./target/release/screen_time \
+  --api-key fastvlm \
+  --model "fastvlm"
+
+# 使用环境变量
+export SILICONFLOW_API_KEY=fastvlm
+export SILICONFLOW_MODEL=fastvlm
+./target/release/screen_time
+
+# 结合图片处理参数
+./target/release/screen_time \
+  --api-key fastvlm \
+  --model "fastvlm" \
+  --image-target-width 1024 \
+  --no-image-grayscale
+```
+
+**FastVLM特性**:
+- **本地推理**: 所有分析在本地完成，保护隐私
+- **高性能**: 使用ONNX运行时，支持CPU和GPU加速
+- **自动管理**: 自动下载和管理模型文件
+- **灵活配置**: 支持自定义模型路径和推理参数
+
+#### 6. Ollama 本地模型支持
 
 ScreenTime 支持使用 Ollama 本地大语言模型进行图片分析，无需联网即可使用。
 
@@ -299,6 +344,11 @@ ScreenTime 支持配置自定义的 API 端点，适用于以下场景：
 export SILICONFLOW_API_URL=https://test-api.example.com/v1/chat/completions
 ./target/release/screen_time --api-key test_key
 
+# 使用 FastVLM 本地模型
+./target/release/screen_time \
+  --api-key fastvlm \
+  --model "fastvlm"
+
 # 使用 Ollama 本地模型
 ./target/release/screen_time \
   --api-key ollama \
@@ -338,6 +388,7 @@ ScreenTime/
 │   ├── config.rs            # 配置解析（简化版）
 │   ├── screenshot.rs        # 屏幕截图功能
 │   ├── siliconflow.rs       # SiliconFlow API 调用（包含token统计）
+│   ├── fastvlm_local.rs     # 本地FastVLM模型推理
 │   ├── logger.rs            # 日志记录功能（按日期分类）
 │   ├── models.rs            # 数据模型定义（扩展版）
 │   ├── capture.rs           # 截屏循环控制
@@ -347,6 +398,7 @@ ScreenTime/
 │   ├── service_state.rs     # 服务状态管理
 │   ├── standalone_service.rs # 独立服务实现
 │   └── test_prompt.rs       # 测试prompt功能
+├── fastvlm/                 # FastVLM本地模型库
 ├── examples/                # 示例代码
 ├── Cargo.toml              # 项目配置和依赖
 ├── CHANGELOG.md            # 更新日志
@@ -374,6 +426,7 @@ ScreenTime/
 - `serde`: 序列化/反序列化
 - `chrono`: 日期时间处理
 - `clap`: 命令行参数解析
+- `fastvlm`: 本地视觉语言模型推理
 
 ### 系统信息收集
 - `sysinfo`: 系统信息获取
@@ -454,9 +507,10 @@ logs/
 2. **API 费用**: SiliconFlow API 调用可能会产生费用，请根据你的使用情况进行监控
 3. **隐私保护**: 截图和分析结果会保存在本地，请注意保护个人隐私
 4. **系统兼容性**: 支持 macOS 和 Windows 系统，Linux 系统的支持正在开发中
-5. **网络连接**: 需要稳定的网络连接以调用 AI 分析服务
+5. **网络连接**: 使用云端API时需要稳定的网络连接，本地FastVLM模型无需网络
 6. **管理员权限**: Windows 系统可能需要管理员权限来获取完整的窗口信息
 7. **自定义API**: 使用自定义API端点时，请确保端点支持与官方API相同的接口格式
+8. **FastVLM模型**: 首次使用FastVLM时会自动下载模型文件（约2GB），请确保有足够的存储空间
 
 ## 🤝 贡献
 

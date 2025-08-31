@@ -23,6 +23,13 @@ pub struct TokenUsage {
     pub total_tokens: Option<u32>,
 }
 
+/// 通用的AI分析结果类型
+#[derive(Debug, Clone)]
+pub struct AnalysisResult {
+    pub description: String,
+    pub token_usage: Option<TokenUsage>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SystemContext {
     pub active_app: Option<String>,

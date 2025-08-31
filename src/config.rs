@@ -6,8 +6,9 @@ use std::env;
 #[clap(author, version, about, long_about = None)]
 pub struct Config {
     /// SiliconFlow API key (or set SILICONFLOW_API_KEY environment variable)
+    /// Not required when using FastVLM local model
     #[clap(short, long, env = "SILICONFLOW_API_KEY")]
-    pub api_key: String,
+    pub api_key: Option<String>,
 
     /// SiliconFlow API URL (or set SILICONFLOW_API_URL environment variable)
     #[clap(
@@ -109,7 +110,13 @@ pub struct Config {
     )]
     pub test_log_path: PathBuf,
 
-
+    /// FastVLM model directory path (enables local FastVLM processing)
+    #[clap(
+        long,
+        env = "FASTVLM_MODEL_DIR",
+        help = "FastVLM本地模型目录路径，如果设置则启用本地FastVLM处理"
+    )]
+    pub fastvlm_model_dir: Option<PathBuf>,
 
     /// Service control socket path
     #[clap(
@@ -193,6 +200,20 @@ impl Config {
         data_dir.join("service.sock")
     }
 
+    /// 检查是否使用FastVLM本地模型
+    pub fn is_using_fastvlm(&self) -> bool {
+        if let Some(ref dir) = self.fastvlm_model_dir {
+            dir.exists() && dir.is_dir()
+        } else {
+            false
+        }
+    }
+
+    /// 获取FastVLM模型目录路径
+    pub fn get_fastvlm_model_dir(&self) -> Option<&PathBuf> {
+        self.fastvlm_model_dir.as_ref()
+    }
+
     /// 生成配置哈希值
     pub fn get_config_hash(&self) -> String {
         use std::collections::hash_map::DefaultHasher;
@@ -206,6 +227,10 @@ impl Config {
         self.image_target_width.hash(&mut hasher);
         self.image_grayscale.hash(&mut hasher);
         self.no_image_grayscale.hash(&mut hasher);
+        // 添加fastvlm_model_dir到哈希计算中
+        if let Some(ref dir) = self.fastvlm_model_dir {
+            dir.hash(&mut hasher);
+        }
         hasher.finish().to_string()
     }
 }

@@ -54,12 +54,8 @@ struct MessageResponse {
     content: String,
 }
 
-/// 分析结果，包含描述和token使用信息
-#[derive(Debug)]
-pub struct AnalysisResult {
-    pub description: String,
-    pub token_usage: Option<TokenUsage>,
-}
+// 使用models模块中的通用AnalysisResult类型
+use crate::models::AnalysisResult;
 
 pub async fn analyze_screenshot_with_prompt(
     api_key: &str,
