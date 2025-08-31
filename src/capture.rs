@@ -312,12 +312,52 @@ async fn perform_capture(
     // 等待一段时间确保文件写入完成
     sleep(Duration::from_millis(500)).await;
     
-    // 调用SiliconFlow API分析截图
+    // 调用SiliconFlow API分析截图（带重试机制）
+    let analysis_result = analyze_screenshot_with_retry(
+        config,
+        screenshot_path_str,
+        &timestamp
+    ).await?;
+    
+    // 创建活动日志
+    let ctx_original = context::collect_system_context().await;
+    let ctx = convert_context_to_models(&ctx_original);
+    
+    let log = ActivityLog {
+        timestamp,
+        description: analysis_result.description,
+        context: Some(ctx),
+        screenshot_path: Some(screenshot_path_str.to_string()),
+        model: Some(config.model.clone()),
+        token_usage: analysis_result.token_usage,
+    };
+    
+    // 保存日志
+    match logger::save_activity_log(&log, config) {
+        Ok(_) => println!("💾 日志已保存"),
+        Err(e) => eprintln!("保存日志时出错: {}", e),
+    }
+    
+    // 更新截屏计数
+    if let Err(e) = state_manager.increment_capture_count().await {
+        eprintln!("更新截屏计数时出错: {}", e);
+    }
+    
+    Ok(())
+}
+
+/// 带重试机制的截图分析
+async fn analyze_screenshot_with_retry(
+    config: &Config,
+    screenshot_path_str: &str,
+    _timestamp: &chrono::DateTime<chrono::Local>
+) -> Result<siliconflow::AnalysisResult, Box<dyn Error + Send + Sync>> {
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAYS: [u64; 3] = [5, 15, 30]; // 重试延迟：5秒、15秒、30秒
+    
+    // 获取系统上下文和历史记录
     let ctx_original = context::collect_system_context().await;
     let ctx_text = context::format_context_as_text(&ctx_original);
-    
-    // 转换context格式到models格式
-    let ctx = convert_context_to_models(&ctx_original);
     
     // 获取历史活动记录（最近5条）
     let activity_history = match logger::get_recent_activity_context(config, 5) {
@@ -327,53 +367,63 @@ async fn perform_capture(
             None
         }
     };
-
-    match siliconflow::analyze_screenshot_with_prompt(
-        &config.api_key,
-        &config.api_url,
-        &config.model,
-        screenshot_path_str,
-        &config.prompt,
-        Some(&ctx_text), // 系统上下文
-        activity_history.as_deref(), // 用户活动历史
-    ).await {
-        Ok(analysis_result) => {
-            println!("🔍 分析结果: {}", analysis_result.description);
-            if let Some(ref token_usage) = analysis_result.token_usage {
-                println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
-                    token_usage.prompt_tokens, 
-                    token_usage.completion_tokens, 
-                    token_usage.total_tokens);
+    
+    let mut last_error = None;
+    
+    for attempt in 1..=MAX_RETRIES {
+        println!("🔍 尝试分析截图 (第 {}/{} 次)", attempt, MAX_RETRIES);
+        
+        match siliconflow::analyze_screenshot_with_prompt(
+            &config.api_key,
+            &config.api_url,
+            &config.model,
+            screenshot_path_str,
+            &config.prompt,
+            Some(&ctx_text),
+            activity_history.as_deref(),
+        ).await {
+            Ok(analysis_result) => {
+                println!("✅ 分析成功: {}", analysis_result.description);
+                if let Some(ref token_usage) = analysis_result.token_usage {
+                    println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                        token_usage.prompt_tokens, 
+                        token_usage.completion_tokens, 
+                        token_usage.total_tokens);
+                }
+                return Ok(analysis_result);
+            },
+            Err(e) => {
+                last_error = Some(e);
+                let error_msg = last_error.as_ref().unwrap();
+                
+                // 判断是否为网络相关错误
+                let is_network_error = error_msg.to_string().contains("connection") ||
+                                     error_msg.to_string().contains("timeout") ||
+                                     error_msg.to_string().contains("network") ||
+                                     error_msg.to_string().contains("Connection refused") ||
+                                     error_msg.to_string().contains("connection closed");
+                
+                if is_network_error {
+                    eprintln!("🌐 网络错误 (第 {}/{} 次): {}", attempt, MAX_RETRIES, error_msg);
+                    
+                    if attempt < MAX_RETRIES {
+                        let delay = RETRY_DELAYS[attempt as usize - 1];
+                        println!("⏳ 等待 {} 秒后重试...", delay);
+                        sleep(Duration::from_secs(delay)).await;
+                    } else {
+                        eprintln!("❌ 达到最大重试次数，分析失败");
+                    }
+                } else {
+                    // 非网络错误，直接失败
+                    eprintln!("❌ 非网络错误，停止重试: {}", error_msg);
+                    break;
+                }
             }
-            
-            // 创建活动日志
-            let log = ActivityLog {
-                timestamp,
-                description: analysis_result.description,
-                context: Some(ctx), // 记录上下文
-                screenshot_path: Some(screenshot_path_str.to_string()),
-                model: Some(config.model.clone()),
-                token_usage: analysis_result.token_usage,
-            };
-            
-            // 保存日志
-            match logger::save_activity_log(&log, config) {
-                Ok(_) => println!("💾 日志已保存"),
-                Err(e) => eprintln!("保存日志时出错: {}", e),
-            }
-            
-            // 更新截屏计数
-            if let Err(e) = state_manager.increment_capture_count().await {
-                eprintln!("更新截屏计数时出错: {}", e);
-            }
-        },
-        Err(e) => {
-            eprintln!("分析截图时出错: {}", e);
-            return Err(e);
         }
     }
     
-    Ok(())
+    // 所有重试都失败了
+    Err(last_error.unwrap_or_else(|| "未知错误".into()))
 }
 
 /// 将context模块的SystemContext转换为models模块的SystemContext

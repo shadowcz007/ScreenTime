@@ -4,6 +4,7 @@ version = "0.3.0"
 edition = "2021"
 
 [dependencies]
+fastvlm = { git = "https://github.com/shadowcz007/fastvlm" }
 tokio = { version = "1.0", features = ["full"] }
 image = "0.24"
 screenshots = "0.8.10"
