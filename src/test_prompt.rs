@@ -1,6 +1,6 @@
 use crate::siliconflow;
 use crate::logger;
-use crate::models::ActivityLog;
+use crate::models::{ActivityLog, SystemContext};
 use crate::config::Config;
 use crate::context;
 use std::error::Error;
@@ -13,13 +13,12 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
     
     println!("🧪 开始测试新prompt...");
     println!("📝 测试prompt: {}", test_prompt);
-    println!("📊 使用日志文件: {:?}", config.log_path);
+    println!("📊 使用日志目录: {:?}", config.get_logs_dir());
     println!("💾 测试结果保存到: {:?}", config.test_log_path);
     println!();
 
-    // 读取现有的活动日志
-    let log_path_str = config.log_path.to_str().unwrap_or("activity_log.json");
-    let existing_logs = logger::load_activity_logs(log_path_str)?;
+    // 读取最近30天的日志
+    let existing_logs = logger::load_recent_daily_logs(&config, 30)?;
     
     if existing_logs.is_empty() {
         return Err("没有找到现有的活动日志，无法进行测试".into());
@@ -57,18 +56,26 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
                 &config.model,
                 screenshot_path,
                 test_prompt,
-                original_log.context.as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
+                original_log.context.as_ref().map(|ctx| convert_models_to_context(ctx)).as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
                 Some(&history_context),
             ).await {
-                Ok(new_description) => {
-                    println!("✅ 重新分析完成: {}", new_description.lines().next().unwrap_or("无描述"));
+                Ok(analysis_result) => {
+                    println!("✅ 重新分析完成: {}", analysis_result.description.lines().next().unwrap_or("无描述"));
+                    if let Some(ref token_usage) = analysis_result.token_usage {
+                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                            token_usage.prompt_tokens, 
+                            token_usage.completion_tokens, 
+                            token_usage.total_tokens);
+                    }
 
                     // 创建新的测试日志条目
                     let test_log = ActivityLog {
                         timestamp: original_log.timestamp,
-                        description: new_description,
+                        description: analysis_result.description,
                         context: original_log.context.clone(),
                         screenshot_path: original_log.screenshot_path.clone(),
+                        model: Some(config.model.clone()),
+                        token_usage: analysis_result.token_usage,
                     };
 
                     // 立即保存到测试日志文件
@@ -208,4 +215,29 @@ fn show_comparison_summary(original: &[ActivityLog], test: &[ActivityLog]) -> Re
     println!("  长度变化: {:.1}%", ((test_avg_length - original_avg_length) / original_avg_length * 100.0));
     
     Ok(())
+}
+
+/// 将models模块的SystemContext转换为context模块的SystemContext
+fn convert_models_to_context(ctx: &SystemContext) -> context::SystemContext {
+    context::SystemContext {
+        username: ctx.system_info.as_ref()
+            .and_then(|info| info.username.clone())
+            .unwrap_or_else(|| "unknown".to_string()),
+        hostname: ctx.system_info.as_ref().and_then(|info| info.hostname.clone()),
+        os_name: ctx.system_info.as_ref().and_then(|info| info.platform.clone()),
+        os_version: None,
+        kernel_version: None,
+        uptime_secs: 0,
+        used_memory_mb: 0,
+        total_memory_mb: 0,
+        processes_top: Vec::new(),
+        active_window: ctx.active_app.as_ref().or(ctx.window_title.as_ref()).map(|_| {
+            context::ActiveWindowInfo {
+                app_name: ctx.active_app.clone(),
+                window_title: ctx.window_title.clone(),
+                bounds: None, // 测试环境中不需要窗口位置信息
+            }
+        }),
+        interfaces: Vec::new(),
+    }
 }

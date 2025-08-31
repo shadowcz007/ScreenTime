@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::path::PathBuf;
+use std::env;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -40,21 +41,20 @@ pub struct Config {
     )]
     pub interval: u64,
 
-    /// Directory to save screenshots
+    /// Data directory for all ScreenTime files (logs, screenshots, etc.)
     #[clap(
-        short, long,
-        default_value = "screenshots",
-        env = "SCREENSHOT_DIRECTORY"
+        long,
+        env = "SCREENTIME_DATA_DIR",
+        help = "数据存储根目录，包含日志、截图等所有文件"
     )]
-    pub screenshot_dir: PathBuf,
+    pub data_dir: Option<PathBuf>,
 
-    /// Path to save activity log
+    /// Path to save service state
     #[clap(
-        short, long,
-        default_value = "activity_log.json",
-        env = "ACTIVITY_LOG_PATH"
+        long,
+        env = "SERVICE_STATE_PATH"
     )]
-    pub log_path: PathBuf,
+    pub state_path: Option<PathBuf>,
 
     /// Target width for image processing (None to keep original size)
     #[clap(
@@ -84,8 +84,8 @@ pub struct Config {
     )]
     pub no_image_grayscale: bool,
 
-    /// Enable MCP server mode
-    #[clap(long, help = "启用MCP服务器模式")]
+    /// Enable MCP server mode (default: standalone service mode)
+    #[clap(long, help = "启用MCP服务器模式（默认：独立截屏服务模式）")]
     pub mcp: bool,
 
     /// MCP server port number
@@ -108,10 +108,104 @@ pub struct Config {
         env = "TEST_LOG_PATH"
     )]
     pub test_log_path: PathBuf,
+
+
+
+    /// Service control socket path
+    #[clap(
+        long,
+        env = "SERVICE_SOCKET_PATH"
+    )]
+    pub socket_path: Option<PathBuf>,
 }
 
 impl Config {
     pub fn from_args() -> Self {
         Self::parse()
+    }
+
+    /// 获取数据存储根目录
+    pub fn get_data_dir(&self) -> PathBuf {
+        // 优先使用命令行或环境变量指定的目录
+        if let Some(ref dir) = self.data_dir {
+            return dir.clone();
+        }
+
+        // 使用环境变量
+        if let Some(dir) = env::var_os("SCREENTIME_DATA_DIR") {
+            return PathBuf::from(dir);
+        }
+
+        // 使用系统默认目录
+        #[cfg(target_os = "macos")]
+        {
+            let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(home).join("Library/Application Support/ScreenTime")
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(home).join(".local/share/screentime")
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let appdata = env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(appdata).join("ScreenTime")
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        {
+            PathBuf::from(".")
+        }
+    }
+
+    /// 获取截图保存目录
+    pub fn get_screenshot_dir(&self) -> PathBuf {
+        self.get_data_dir().join("screenshots")
+    }
+
+    /// 获取按日期分类的日志目录
+    pub fn get_logs_dir(&self) -> PathBuf {
+        self.get_data_dir().join("logs")
+    }
+
+    /// 获取指定日期的日志文件路径
+    pub fn get_daily_log_path(&self, date: &str) -> PathBuf {
+        self.get_logs_dir().join(format!("{}.json", date))
+    }
+
+    /// 获取状态文件路径
+    pub fn get_state_path(&self) -> PathBuf {
+        if let Some(path) = &self.state_path {
+            return path.clone();
+        }
+        
+        let data_dir = self.get_data_dir();
+        data_dir.join("service_state.json")
+    }
+
+    /// 获取控制socket路径
+    pub fn get_socket_path(&self) -> PathBuf {
+        if let Some(path) = &self.socket_path {
+            return path.clone();
+        }
+        
+        let data_dir = self.get_data_dir();
+        data_dir.join("service.sock")
+    }
+
+    /// 生成配置哈希值
+    pub fn get_config_hash(&self) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        self.api_url.hash(&mut hasher);
+        self.model.hash(&mut hasher);
+        self.prompt.hash(&mut hasher);
+        self.interval.hash(&mut hasher);
+        self.image_target_width.hash(&mut hasher);
+        self.image_grayscale.hash(&mut hasher);
+        self.no_image_grayscale.hash(&mut hasher);
+        hasher.finish().to_string()
     }
 }

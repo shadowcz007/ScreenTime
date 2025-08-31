@@ -1,5 +1,45 @@
 # 更新日志
 
+## [0.3.0] - 2024-12-19
+
+### 🔧 重大重构 - 配置简化优化
+- **统一数据目录**: 简化配置参数，移除 `--screenshot-dir` 和 `--log-path` 参数
+- **固定目录结构**: 采用标准的数据目录结构，所有数据统一存储在 `--data-dir` 下
+  - `screenshots/` - 截图文件
+  - `logs/` - 按日期分类的日志文件
+  - `service_state.json` - 服务状态文件
+- **默认路径优化**: 
+  - macOS: `~/Library/Application Support/ScreenTime/`
+  - Linux: `~/.local/share/screentime/`
+  - Windows: `%APPDATA%/ScreenTime/`
+
+### 💰 新增功能 - Token使用统计
+- **Token消耗记录**: 每次AI分析都会记录详细的token使用信息
+  - 输入token数量 (`prompt_tokens`)
+  - 输出token数量 (`completion_tokens`) 
+  - 总token数量 (`total_tokens`)
+- **模型信息记录**: 日志中包含使用的AI模型名称
+- **实时显示**: 控制台实时显示每次分析的token消耗统计
+
+### 📅 日志系统优化
+- **按日期分类存储**: 日志文件按天分别保存 (格式: `YYYY-MM-DD.json`)
+- **扩展日志结构**: ActivityLog增加 `model` 和 `token_usage` 字段
+- **智能读取**: 支持读取最近N天的日志，自动聚合数据
+
+### 🚮 移除功能
+- **移除向后兼容**: 不再支持旧的日志格式和路径配置
+- **简化参数**: 移除复杂的路径配置选项，采用约定大于配置的理念
+- **清理代码**: 移除所有向后兼容相关的代码逻辑
+
+### 🔧 改进
+- **API响应优化**: 重构 `analyze_screenshot_with_prompt` 返回详细分析结果
+- **MCP服务更新**: 自动使用新的按日期存储的日志系统
+- **目录自动创建**: 程序自动创建必要的目录结构
+
+### 📚 文档
+- **README更新**: 反映新的配置方式和功能
+- **参数文档**: 更新命令行参数说明，移除废弃参数
+
 ## [0.2.2] - 2024-12-19
 
 ### 🖼️ 新增功能
