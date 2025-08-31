@@ -54,11 +54,12 @@ struct MessageResponse {
     content: String,
 }
 
-/// 分析结果，包含描述和token使用信息
+/// 分析结果，包含描述、token使用信息和计算耗时
 #[derive(Debug)]
 pub struct AnalysisResult {
     pub description: String,
     pub token_usage: Option<TokenUsage>,
+    pub processing_time: std::time::Duration,
 }
 
 pub async fn analyze_screenshot_with_prompt(
@@ -70,6 +71,7 @@ pub async fn analyze_screenshot_with_prompt(
     extra_context: Option<&str>, // 系统上下文
     activity_history: Option<&str>, // 新增：用户活动历史
 ) -> Result<AnalysisResult, Box<dyn Error + Send + Sync>> {
+    let start_time = std::time::Instant::now();
     let client = reqwest::Client::new();
     let url = api_url;
     
@@ -158,9 +160,11 @@ pub async fn analyze_screenshot_with_prompt(
                 total_tokens: usage.total_tokens,
             });
 
+            let processing_time = start_time.elapsed();
             Ok(AnalysisResult {
                 description,
                 token_usage,
+                processing_time,
             })
         },
         Err(e) => {

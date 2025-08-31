@@ -266,11 +266,7 @@ impl StandaloneService {
         Self::start_capture_task(&self.state_manager, &self.config, &self.capture_handle).await
     }
     
-    /// 停止服务
-    pub async fn shutdown(&self) {
-        let _ = self.shutdown_tx.send(());
-        Self::stop_capture_task(&self.capture_handle).await;
-    }
+
 }
 
 /// 服务控制客户端
