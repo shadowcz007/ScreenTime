@@ -190,7 +190,6 @@ async fn perform_capture(
 }
 
 // 使用models模块中的通用AnalysisResult类型
-use crate::models::AnalysisResult;
 
 /// 带重试机制的截图分析（支持三种计算方式）
 async fn analyze_screenshot_with_retry(

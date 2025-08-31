@@ -3,7 +3,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::models::{TokenUsage, AnalysisResult};
+use crate::models::AnalysisResult;
 
 /// FastVLM本地模型服务
 pub struct FastVLMService {
