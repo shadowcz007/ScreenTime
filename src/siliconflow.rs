@@ -70,9 +70,14 @@ pub async fn analyze_screenshot_with_prompt(
     prompt: &str,
     extra_context: Option<&str>, // 系统上下文
     activity_history: Option<&str>, // 新增：用户活动历史
+    timeout_secs: u64, // 新增：超时时间参数
 ) -> Result<AnalysisResult, Box<dyn Error + Send + Sync>> {
     let start_time = std::time::Instant::now();
-    let client = reqwest::Client::new();
+    
+    // 创建带有自定义超时的HTTP客户端
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()?;
     let url = api_url;
     
     // 读取图片文件并编码为base64

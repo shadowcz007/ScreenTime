@@ -388,33 +388,45 @@ impl ServiceController {
     
     /// 发送命令到服务
     pub async fn send_command(&self, command: ServiceCommand) -> Result<ServiceResponse, Box<dyn Error + Send + Sync>> {
-        #[cfg(unix)]
-        {
-            let mut stream = UnixStream::connect(&self.socket_path).await?;
-            
-            let command_str = serde_json::to_string(&command)?;
-            stream.write_all(command_str.as_bytes()).await?;
-            
-            let mut buffer = [0; 4096];
-            let n = stream.read(&mut buffer).await?;
-            let response_str = String::from_utf8_lossy(&buffer[..n]);
-            
-            let response: ServiceResponse = serde_json::from_str(&response_str)?;
-            Ok(response)
-        }
-        #[cfg(windows)]
-        {
-            let mut stream = TcpStream::connect(format!("127.0.0.1:{}", self.port)).await?;
-            
-            let command_str = serde_json::to_string(&command)?;
-            stream.write_all(command_str.as_bytes()).await?;
-            
-            let mut buffer = [0; 4096];
-            let n = stream.read(&mut buffer).await?;
-            let response_str = String::from_utf8_lossy(&buffer[..n]);
-            
-            let response: ServiceResponse = serde_json::from_str(&response_str)?;
-            Ok(response)
+        use tokio::time::{timeout, Duration};
+        
+        // 设置30秒的连接和通信超时
+        let timeout_duration = Duration::from_secs(30);
+        
+        let result = timeout(timeout_duration, async {
+            #[cfg(unix)]
+            {
+                let mut stream = UnixStream::connect(&self.socket_path).await?;
+                
+                let command_str = serde_json::to_string(&command)?;
+                stream.write_all(command_str.as_bytes()).await?;
+                
+                let mut buffer = [0; 4096];
+                let n = stream.read(&mut buffer).await?;
+                let response_str = String::from_utf8_lossy(&buffer[..n]);
+                
+                let response: ServiceResponse = serde_json::from_str(&response_str)?;
+                Ok(response)
+            }
+            #[cfg(windows)]
+            {
+                let mut stream = TcpStream::connect(format!("127.0.0.1:{}", self.port)).await?;
+                
+                let command_str = serde_json::to_string(&command)?;
+                stream.write_all(command_str.as_bytes()).await?;
+                
+                let mut buffer = [0; 4096];
+                let n = stream.read(&mut buffer).await?;
+                let response_str = String::from_utf8_lossy(&buffer[..n]);
+                
+                let response: ServiceResponse = serde_json::from_str(&response_str)?;
+                Ok(response)
+            }
+        }).await;
+        
+        match result {
+            Ok(response) => response,
+            Err(_) => Err("操作超时：TCP连接或通信超过30秒".into()),
         }
     }
 }

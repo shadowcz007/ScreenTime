@@ -97,6 +97,15 @@ pub struct Config {
     )]
     pub mcp_port: u16,
 
+    /// API request timeout in seconds
+    #[clap(
+        long,
+        default_value = "120",
+        env = "API_TIMEOUT_SECONDS",
+        help = "API请求超时时间（秒）"
+    )]
+    pub api_timeout: u64,
+
     /// Test a new prompt using existing screenshots and context
     #[clap(long, help = "测试新的prompt，使用现有的截图和上下文重新计算")]
     pub test_prompt: Option<String>,
@@ -219,6 +228,7 @@ impl Config {
         self.image_target_width.hash(&mut hasher);
         self.image_grayscale.hash(&mut hasher);
         self.no_image_grayscale.hash(&mut hasher);
+        self.api_timeout.hash(&mut hasher);
         hasher.finish().to_string()
     }
 }

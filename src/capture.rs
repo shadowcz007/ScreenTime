@@ -190,6 +190,7 @@ async fn analyze_screenshot_with_retry(
             &config.prompt,
             Some(&ctx_text),
             activity_history.as_deref(),
+            config.api_timeout,
         )
         .await
         {

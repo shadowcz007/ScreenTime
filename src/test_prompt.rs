@@ -58,6 +58,7 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
                 test_prompt,
                 original_log.context.as_ref().map(|ctx| convert_models_to_context(ctx)).as_ref().map(|ctx| context::format_context_as_text(ctx)).as_deref(),
                 Some(&history_context),
+                config.api_timeout,
             ).await {
                 Ok(analysis_result) => {
                     println!("✅ 重新分析完成: {}", analysis_result.description.lines().next().unwrap_or("无描述"));
