@@ -6,7 +6,10 @@ use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
+#[cfg(windows)]
+use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde_json;
 
@@ -49,33 +52,58 @@ impl StandaloneService {
         }
         
         // 启动控制socket服务器
-        let socket_path = self.config.get_socket_path();
-        if socket_path.exists() {
-            let _ = std::fs::remove_file(&socket_path);
+        #[cfg(unix)]
+        {
+            let socket_path = self.config.get_socket_path();
+            if socket_path.exists() {
+                let _ = std::fs::remove_file(&socket_path);
+            }
+            
+            // 确保socket目录存在
+            if let Some(parent) = socket_path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
+            
+            let listener = UnixListener::bind(&socket_path)?;
+            println!("🔌 控制socket启动: {:?}", socket_path);
+            
+            let state_manager = self.state_manager.clone();
+            let config = self.config.clone();
+            let shutdown_tx = self.shutdown_tx.clone();
+            let capture_handle = self.capture_handle.clone();
+            
+            tokio::spawn(async move {
+                Self::handle_unix_socket_connections(
+                    listener, 
+                    state_manager, 
+                    config, 
+                    shutdown_tx,
+                    capture_handle
+                ).await;
+            });
         }
         
-        // 确保socket目录存在
-        if let Some(parent) = socket_path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+        #[cfg(windows)]
+        {
+            let port = self.config.get_control_port();
+            let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
+            println!("🔌 控制TCP socket启动: 127.0.0.1:{}", port);
+            
+            let state_manager = self.state_manager.clone();
+            let config = self.config.clone();
+            let shutdown_tx = self.shutdown_tx.clone();
+            let capture_handle = self.capture_handle.clone();
+            
+            tokio::spawn(async move {
+                Self::handle_tcp_socket_connections(
+                    listener, 
+                    state_manager, 
+                    config, 
+                    shutdown_tx,
+                    capture_handle
+                ).await;
+            });
         }
-        
-        let listener = UnixListener::bind(&socket_path)?;
-        println!("🔌 控制socket启动: {:?}", socket_path);
-        
-        let state_manager = self.state_manager.clone();
-        let config = self.config.clone();
-        let shutdown_tx = self.shutdown_tx.clone();
-        let capture_handle = self.capture_handle.clone();
-        
-        tokio::spawn(async move {
-            Self::handle_socket_connections(
-                listener, 
-                state_manager, 
-                config, 
-                shutdown_tx,
-                capture_handle
-            ).await;
-        });
         
         println!("✅ 独立截屏服务启动完成！");
         
@@ -83,14 +111,19 @@ impl StandaloneService {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         shutdown_rx.recv().await.ok();
         
-        // 清理socket文件
-        let _ = std::fs::remove_file(&socket_path);
+        // 清理socket文件（仅Unix系统）
+        #[cfg(unix)]
+        {
+            let socket_path = self.config.get_socket_path();
+            let _ = std::fs::remove_file(&socket_path);
+        }
         
         Ok(())
     }
     
-    /// 处理socket连接
-    async fn handle_socket_connections(
+    /// 处理Unix socket连接
+    #[cfg(unix)]
+    async fn handle_unix_socket_connections(
         listener: UnixListener,
         state_manager: Arc<ServiceStateManager>,
         config: Config,
@@ -99,81 +132,141 @@ impl StandaloneService {
     ) {
         loop {
             match listener.accept().await {
-                Ok((stream, _)) => {
+                Ok((stream, _addr)) => {
                     let state_manager = state_manager.clone();
                     let config = config.clone();
-                    let shutdown_tx = _shutdown_tx.clone();
                     let capture_handle = capture_handle.clone();
                     
                     tokio::spawn(async move {
-                        if let Err(e) = Self::handle_client_connection(
-                            stream, 
-                            state_manager, 
-                            config, 
-                            shutdown_tx,
-                            capture_handle
-                        ).await {
-                            eprintln!("处理客户端连接时出错: {}", e);
-                        }
+                        Self::handle_unix_stream(stream, state_manager, config, capture_handle).await;
                     });
                 }
                 Err(e) => {
-                    eprintln!("接受socket连接时出错: {}", e);
+                    eprintln!("接受Unix socket连接失败: {}", e);
                     break;
                 }
             }
         }
     }
     
-    /// 处理单个客户端连接
-    async fn handle_client_connection(
+    /// 处理TCP socket连接
+    #[cfg(windows)]
+    async fn handle_tcp_socket_connections(
+        listener: TcpListener,
+        state_manager: Arc<ServiceStateManager>,
+        config: Config,
+        _shutdown_tx: broadcast::Sender<()>,
+        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+    ) {
+        loop {
+            match listener.accept().await {
+                Ok((stream, addr)) => {
+                    println!("接受TCP连接: {}", addr);
+                    let state_manager = state_manager.clone();
+                    let config = config.clone();
+                    let capture_handle = capture_handle.clone();
+                    
+                    tokio::spawn(async move {
+                        Self::handle_tcp_stream(stream, state_manager, config, capture_handle).await;
+                    });
+                }
+                Err(e) => {
+                    eprintln!("接受TCP socket连接失败: {}", e);
+                    break;
+                }
+            }
+        }
+    }
+    
+    /// 处理Unix stream
+    #[cfg(unix)]
+    async fn handle_unix_stream(
         mut stream: UnixStream,
         state_manager: Arc<ServiceStateManager>,
         config: Config,
-        shutdown_tx: broadcast::Sender<()>,
         capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let mut buffer = [0; 1024];
-        let n = stream.read(&mut buffer).await?;
-        let command_str = String::from_utf8_lossy(&buffer[..n]);
+    ) {
+        let mut buffer = Vec::new();
+        let mut temp_buffer = [0; 1024];
         
-        let response = match serde_json::from_str::<ServiceCommand>(&command_str) {
-            Ok(command) => {
-                Self::handle_command(
-                    command, 
-                    state_manager, 
-                    config, 
-                    shutdown_tx,
-                    capture_handle
-                ).await
+        loop {
+            match stream.read(&mut temp_buffer).await {
+                Ok(0) => break, // 连接关闭
+                Ok(n) => {
+                    buffer.extend_from_slice(&temp_buffer[..n]);
+                    
+                    // 尝试解析JSON命令
+                    if let Ok(command) = serde_json::from_slice::<ServiceCommand>(&buffer) {
+                        let response = Self::handle_command(command, &state_manager, &config, &capture_handle).await;
+                        
+                        if let Ok(response_json) = serde_json::to_string(&response) {
+                            if let Err(e) = stream.write_all(response_json.as_bytes()).await {
+                                eprintln!("写入Unix socket响应失败: {}", e);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("读取Unix socket失败: {}", e);
+                    break;
+                }
             }
-            Err(e) => ServiceResponse {
-                success: false,
-                message: format!("无效命令: {}", e),
-                state: None,
+        }
+    }
+    
+    /// 处理TCP stream
+    #[cfg(windows)]
+    async fn handle_tcp_stream(
+        mut stream: TcpStream,
+        state_manager: Arc<ServiceStateManager>,
+        config: Config,
+        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+    ) {
+        let mut buffer = Vec::new();
+        let mut temp_buffer = [0; 1024];
+        
+        loop {
+            match stream.read(&mut temp_buffer).await {
+                Ok(0) => break, // 连接关闭
+                Ok(n) => {
+                    buffer.extend_from_slice(&temp_buffer[..n]);
+                    
+                    // 尝试解析JSON命令
+                    if let Ok(command) = serde_json::from_slice::<ServiceCommand>(&buffer) {
+                        let response = Self::handle_command(command, &state_manager, &config, &capture_handle).await;
+                        
+                        if let Ok(response_json) = serde_json::to_string(&response) {
+                            if let Err(e) = stream.write_all(response_json.as_bytes()).await {
+                                eprintln!("写入TCP socket响应失败: {}", e);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("读取TCP socket失败: {}", e);
+                    break;
+                }
             }
-        };
-        
-        let response_str = serde_json::to_string(&response)?;
-        stream.write_all(response_str.as_bytes()).await?;
-        
-        Ok(())
+        }
     }
     
     /// 处理服务命令
     async fn handle_command(
         command: ServiceCommand,
-        state_manager: Arc<ServiceStateManager>,
-        config: Config,
-        _shutdown_tx: broadcast::Sender<()>,
-        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+        state_manager: &Arc<ServiceStateManager>,
+        config: &Config,
+        capture_handle: &Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
     ) -> ServiceResponse {
         match command {
             ServiceCommand::Start => {
                 match state_manager.start_service().await {
                     Ok(true) => {
                         // 启动截屏循环
-                        if let Err(e) = Self::start_capture_task(&state_manager, &config, &capture_handle).await {
+                        if let Err(e) = Self::start_capture_task(state_manager, config, capture_handle).await {
                             let _ = state_manager.stop_service().await;
                             ServiceResponse {
                                 success: false,
@@ -204,7 +297,7 @@ impl StandaloneService {
                 match state_manager.stop_service().await {
                     Ok(_) => {
                         // 停止截屏循环
-                        Self::stop_capture_task(&capture_handle).await;
+                        Self::stop_capture_task(capture_handle).await;
                         ServiceResponse {
                             success: true,
                             message: "服务已停止".to_string(),
@@ -271,28 +364,57 @@ impl StandaloneService {
 
 /// 服务控制客户端
 pub struct ServiceController {
+    #[cfg(unix)]
     socket_path: std::path::PathBuf,
+    #[cfg(windows)]
+    port: u16,
 }
 
 impl ServiceController {
     pub fn new(config: &Config) -> Self {
-        Self {
-            socket_path: config.get_socket_path(),
+        #[cfg(unix)]
+        {
+            Self {
+                socket_path: config.get_socket_path(),
+            }
+        }
+        #[cfg(windows)]
+        {
+            Self {
+                port: config.get_control_port(),
+            }
         }
     }
     
     /// 发送命令到服务
     pub async fn send_command(&self, command: ServiceCommand) -> Result<ServiceResponse, Box<dyn Error + Send + Sync>> {
-        let mut stream = UnixStream::connect(&self.socket_path).await?;
-        
-        let command_str = serde_json::to_string(&command)?;
-        stream.write_all(command_str.as_bytes()).await?;
-        
-        let mut buffer = [0; 4096];
-        let n = stream.read(&mut buffer).await?;
-        let response_str = String::from_utf8_lossy(&buffer[..n]);
-        
-        let response: ServiceResponse = serde_json::from_str(&response_str)?;
-        Ok(response)
+        #[cfg(unix)]
+        {
+            let mut stream = UnixStream::connect(&self.socket_path).await?;
+            
+            let command_str = serde_json::to_string(&command)?;
+            stream.write_all(command_str.as_bytes()).await?;
+            
+            let mut buffer = [0; 4096];
+            let n = stream.read(&mut buffer).await?;
+            let response_str = String::from_utf8_lossy(&buffer[..n]);
+            
+            let response: ServiceResponse = serde_json::from_str(&response_str)?;
+            Ok(response)
+        }
+        #[cfg(windows)]
+        {
+            let mut stream = TcpStream::connect(format!("127.0.0.1:{}", self.port)).await?;
+            
+            let command_str = serde_json::to_string(&command)?;
+            stream.write_all(command_str.as_bytes()).await?;
+            
+            let mut buffer = [0; 4096];
+            let n = stream.read(&mut buffer).await?;
+            let response_str = String::from_utf8_lossy(&buffer[..n]);
+            
+            let response: ServiceResponse = serde_json::from_str(&response_str)?;
+            Ok(response)
+        }
     }
 }

@@ -117,6 +117,14 @@ pub struct Config {
         env = "SERVICE_SOCKET_PATH"
     )]
     pub socket_path: Option<PathBuf>,
+
+    /// Service control port (Windows only)
+    #[clap(
+        long,
+        default_value = "5830",
+        env = "SERVICE_CONTROL_PORT"
+    )]
+    pub control_port: u16,
 }
 
 impl Config {
@@ -191,6 +199,11 @@ impl Config {
         
         let data_dir = self.get_data_dir();
         data_dir.join("service.sock")
+    }
+
+    /// 获取控制端口（Windows系统使用）
+    pub fn get_control_port(&self) -> u16 {
+        self.control_port
     }
 
     /// 生成配置哈希值

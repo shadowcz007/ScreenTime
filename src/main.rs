@@ -43,6 +43,49 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    
+    #[tokio::test]
+    async fn test_windows_compatibility() {
+        // 创建一个测试配置，避免解析命令行参数
+        let config = config::Config {
+            api_key: "test_key".to_string(),
+            api_url: "https://api.siliconflow.cn/v1/chat/completions".to_string(),
+            model: "THUDM/GLM-4.1V-9B-Thinking".to_string(),
+            prompt: "测试提示".to_string(),
+            interval: 60,
+            data_dir: None,
+            state_path: None,
+            image_target_width: 1440,
+            image_grayscale: true,
+            no_image_grayscale: false,
+            mcp: false,
+            mcp_port: 6672,
+            test_prompt: None,
+            test_log_path: PathBuf::from("test_log.json"),
+            socket_path: None,
+            control_port: 5830,
+        };
+        
+        #[cfg(windows)]
+        {
+            println!("Windows系统测试:");
+            println!("控制端口: {}", config.get_control_port());
+            assert!(config.get_control_port() > 0);
+        }
+        
+        #[cfg(unix)]
+        {
+            println!("Unix系统测试:");
+            println!("Socket路径: {:?}", config.get_socket_path());
+            assert!(!config.get_socket_path().to_string_lossy().is_empty());
+        }
+    }
+}
+
 async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Send + Sync>> {
     let bind_address = format!("127.0.0.1:{}", config.mcp_port);
 
@@ -148,7 +191,14 @@ async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Er
     println!("  - 截图目录: {:?}", config.get_screenshot_dir());
     println!("  - 日志目录: {:?}", config.get_logs_dir());
     println!("  - 状态文件: {:?}", config.get_state_path());
-    println!("  - Socket路径: {:?}", config.get_socket_path());
+    #[cfg(unix)]
+    {
+        println!("  - Socket路径: {:?}", config.get_socket_path());
+    }
+    #[cfg(windows)]
+    {
+        println!("  - 控制端口: {}", config.get_control_port());
+    }
     println!("  - 图片处理:");
     println!("    * 目标宽度: {}", if config.image_target_width > 0 { config.image_target_width.to_string() } else { "保持原图".to_string() });
     println!("    * 灰度转换: {}", if config.image_grayscale && !config.no_image_grayscale { "启用" } else { "禁用" });
