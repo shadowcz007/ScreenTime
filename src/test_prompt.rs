@@ -63,10 +63,11 @@ pub async fn run_test_prompt(config: Config) -> Result<(), Box<dyn Error + Send 
                 Ok(analysis_result) => {
                     println!("✅ 重新分析完成: {}", analysis_result.description.lines().next().unwrap_or("无描述"));
                     if let Some(ref token_usage) = analysis_result.token_usage {
-                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}", 
+                        println!("Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}，截图时间: {}", 
                             token_usage.prompt_tokens, 
                             token_usage.completion_tokens, 
-                            token_usage.total_tokens);
+                            token_usage.total_tokens,
+                            original_log.timestamp.format("%Y-%m-%d %H:%M:%S"));
                     }
 
                     // 创建新的测试日志条目

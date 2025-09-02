@@ -159,7 +159,7 @@ async fn perform_capture(
 async fn analyze_screenshot_with_retry(
     config: &Config,
     screenshot_path_str: &str,
-    _timestamp: &chrono::DateTime<chrono::Local>,
+    timestamp: &chrono::DateTime<chrono::Local>,
 ) -> Result<siliconflow::AnalysisResult, Box<dyn Error + Send + Sync>> {
     const MAX_RETRIES: u32 = 5;
     const RETRY_DELAYS: [u64; 5] = [5, 15, 30, 45, 60]; // 重试延迟：5秒、15秒、30秒
@@ -198,16 +198,18 @@ async fn analyze_screenshot_with_retry(
                 println!("✅ 分析成功: {}", analysis_result.description);
                 if let Some(ref token_usage) = analysis_result.token_usage {
                     println!(
-                        "Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}, 计算耗时: {:.2}秒",
+                        "Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}, 计算耗时: {:.2}秒，截图时间: {}",
                         token_usage.prompt_tokens,
                         token_usage.completion_tokens,
                         token_usage.total_tokens,
-                        analysis_result.processing_time.as_secs_f64()
+                        analysis_result.processing_time.as_secs_f64(),
+                        timestamp.format("%Y-%m-%d %H:%M:%S")
                     );
                 } else {
                     println!(
-                        "计算耗时: {:.2}秒",
-                        analysis_result.processing_time.as_secs_f64()
+                        "计算耗时: {:.2}秒，截图时间: {}",
+                        analysis_result.processing_time.as_secs_f64(),
+                        timestamp.format("%Y-%m-%d %H:%M:%S")
                     );
                 }
                 return Ok(analysis_result);
