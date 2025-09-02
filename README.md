@@ -347,7 +347,7 @@ ScreenTime/
 │   ├── service_state.rs     # 服务状态管理
 │   ├── standalone_service.rs # 独立服务实现
 │   └── test_prompt.rs       # 测试prompt功能
-├── examples/                # 示例代码
+
 ├── Cargo.toml              # 项目配置和依赖
 ├── CHANGELOG.md            # 更新日志
 └── README.md               # 项目文档

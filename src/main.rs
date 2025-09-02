@@ -10,6 +10,7 @@ mod mcp_service; // MCP服务模块
 mod test_prompt; // 新增测试prompt模块
 mod service_state; // 服务状态管理
 mod standalone_service; // 独立截屏服务
+mod window_tracker; // 窗口追踪模块
 
 use std::error::Error;
 

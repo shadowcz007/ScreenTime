@@ -228,18 +228,18 @@ fn convert_models_to_context(ctx: &SystemContext) -> context::SystemContext {
         hostname: ctx.system_info.as_ref().and_then(|info| info.hostname.clone()),
         os_name: ctx.system_info.as_ref().and_then(|info| info.platform.clone()),
         os_version: None,
-        kernel_version: None,
-        uptime_secs: 0,
-        used_memory_mb: 0,
-        total_memory_mb: 0,
         processes_top: Vec::new(),
         active_window: ctx.active_app.as_ref().or(ctx.window_title.as_ref()).map(|_| {
             context::ActiveWindowInfo {
                 app_name: ctx.active_app.clone(),
                 window_title: ctx.window_title.clone(),
                 bounds: None, // 测试环境中不需要窗口位置信息
+                timestamp: None,
+                process_id: None,
+                switch_stats: None,
+                recent_switches: None,
             }
         }),
-        interfaces: Vec::new(),
+
     }
 }
