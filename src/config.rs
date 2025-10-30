@@ -84,6 +84,15 @@ pub struct Config {
     )]
     pub no_image_grayscale: bool,
 
+    /// 保留截图文件（默认关闭，分析后删除）
+    #[clap(
+        long,
+        env = "KEEP_SCREENSHOTS",
+        help = "分析完成后保留截图文件",
+        action = clap::ArgAction::SetTrue
+    )]
+    pub keep_screenshots: bool,
+
     /// Enable MCP server mode (default: standalone service mode)
     #[clap(long, help = "启用MCP服务器模式（默认：独立截屏服务模式）")]
     pub mcp: bool,
@@ -228,6 +237,7 @@ impl Config {
         self.image_target_width.hash(&mut hasher);
         self.image_grayscale.hash(&mut hasher);
         self.no_image_grayscale.hash(&mut hasher);
+        self.keep_screenshots.hash(&mut hasher);
         self.api_timeout.hash(&mut hasher);
         hasher.finish().to_string()
     }
