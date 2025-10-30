@@ -10,6 +10,7 @@ mod mcp_service; // MCP服务模块
 mod test_prompt; // 新增测试prompt模块
 mod service_state; // 服务状态管理
 mod standalone_service; // 独立截屏服务
+mod window_tracker; // 窗口追踪模块
 
 use std::error::Error;
 
@@ -100,34 +101,54 @@ async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Se
     // 确保必要的目录存在
     tokio::fs::create_dir_all(&config.get_screenshot_dir()).await?;
     
-    // 检查独立服务是否已启动，如果没有则自动启动
+    // 检查独立服务是否已启动，如果没有则自动启动并确保运行
     let service_controller = ServiceController::new(&config);
-    match service_controller.send_command(crate::models::ServiceCommand::Status).await {
-        Ok(_) => {
-            println!("✅ 检测到独立截屏服务已运行");
+    let mut capture_running = false;
+
+    match service_controller
+        .send_command(crate::models::ServiceCommand::Status)
+        .await
+    {
+        Ok(response) => {
+            capture_running =
+                process_service_status_response(response, &service_controller).await;
         }
         Err(_) => {
             println!("🚀 独立截屏服务未运行，正在自动启动...");
-            // 在后台启动独立服务
             let config_clone = config.clone();
             tokio::spawn(async move {
                 if let Err(e) = start_standalone_service_background(config_clone).await {
                     eprintln!("启动独立服务失败: {}", e);
                 }
             });
-            
-            // 等待服务启动
+
             tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-            
-            // 再次检查服务状态
-            match service_controller.send_command(crate::models::ServiceCommand::Status).await {
-                Ok(_) => println!("✅ 独立截屏服务启动成功"),
+
+            match service_controller
+                .send_command(crate::models::ServiceCommand::Status)
+                .await
+            {
+                Ok(response) => {
+                    capture_running = process_service_status_response(
+                        response,
+                        &service_controller,
+                    )
+                    .await;
+                }
                 Err(e) => {
                     eprintln!("⚠️ 独立截屏服务启动失败: {}", e);
-                    eprintln!("   MCP服务仍可使用，但截屏功能需要手动启动独立服务");
+                    eprintln!(
+                        "   MCP服务仍可使用，但截屏功能需要手动启动独立服务"
+                    );
                 }
             }
         }
+    }
+
+    if !capture_running {
+        println!(
+            "⚠️ 独立截屏服务未能自动启动，截屏功能暂不可用（可使用 monitor.start 手动启动）"
+        );
     }
 
     let server_config = SseServerConfig {
@@ -231,4 +252,43 @@ async fn start_standalone_service_background(config: config::Config) -> Result<(
     service.start().await?;
     
     Ok(())
+}
+
+async fn process_service_status_response(
+    response: crate::models::ServiceResponse,
+    controller: &ServiceController,
+) -> bool {
+    if let Some(state) = response.state {
+        if matches!(state.status, crate::models::CaptureServiceStatus::Running) {
+            println!("✅ 检测到独立截屏服务已运行");
+            return true;
+        }
+
+        println!("ℹ️ 独立截屏服务当前为停止状态，正在自动启动...");
+    } else {
+        println!("⚠️ 未获取到独立截屏服务状态，尝试自动启动...");
+    }
+
+    start_capture_service(controller).await
+}
+
+async fn start_capture_service(controller: &ServiceController) -> bool {
+    match controller
+        .send_command(crate::models::ServiceCommand::Start)
+        .await
+    {
+        Ok(response) => {
+            if response.success {
+                println!("✅ 已自动启动截屏服务");
+                true
+            } else {
+                eprintln!("⚠️ 自动启动截屏服务失败: {}", response.message);
+                false
+            }
+        }
+        Err(e) => {
+            eprintln!("⚠️ 无法自动启动截屏服务: {}", e);
+            false
+        }
+    }
 }

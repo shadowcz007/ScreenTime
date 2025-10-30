@@ -26,7 +26,6 @@ use winapi::shared::windef::RECT;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessInfo {
     pub name: String,
-    pub memory_mb: u64,
     pub cpu_percent: f32,
 }
 
@@ -35,6 +34,10 @@ pub struct ActiveWindowInfo {
     pub app_name: Option<String>,
     pub window_title: Option<String>,
     pub bounds: Option<WindowBounds>,
+    pub timestamp: Option<u64>,
+    pub process_id: Option<u32>,
+    pub switch_stats: Option<crate::window_tracker::WindowSwitchStats>,
+    pub recent_switches: Option<Vec<crate::window_tracker::WindowSwitchEvent>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -45,11 +48,7 @@ pub struct WindowBounds {
     pub height: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NetworkInterfaceInfo {
-    pub name: String,
-    pub addr: String,
-}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SystemContext {
@@ -57,13 +56,8 @@ pub struct SystemContext {
     pub hostname: Option<String>,
     pub os_name: Option<String>,
     pub os_version: Option<String>,
-    pub kernel_version: Option<String>,
-    pub uptime_secs: u64,
-    pub total_memory_mb: u64,
-    pub used_memory_mb: u64,
     pub processes_top: Vec<ProcessInfo>,
     pub active_window: Option<ActiveWindowInfo>,
-    pub interfaces: Vec<NetworkInterfaceInfo>,
 }
 
 pub async fn collect_system_context() -> SystemContext {
@@ -80,53 +74,54 @@ pub async fn collect_system_context() -> SystemContext {
     let hostname = System::host_name();
     let os_name = System::name();
     let os_version = System::os_version();
-    let kernel_version = System::kernel_version();
-    let uptime_secs = System::uptime();
-    let total_memory_mb = sys.total_memory() / 1024;
-    let used_memory_mb = sys.used_memory() / 1024;
 
-    // Top N 进程（按内存），并带上当前可得的 CPU 百分比
+    // Top N 进程（按CPU使用率），并带上当前可得的 CPU 百分比
     let mut procs: Vec<ProcessInfo> = sys
         .processes()
         .values()
         .map(|p| ProcessInfo {
             name: p.name().to_string(),
-            memory_mb: p.memory() / 1024,
             cpu_percent: p.cpu_usage(),
         })
         .collect();
-    procs.sort_by_key(|p| std::cmp::Reverse(p.memory_mb));
+    procs.sort_by_key(|p| std::cmp::Reverse(p.cpu_percent as u64));
     procs.truncate(10);
 
-    let interfaces = match get_if_addrs::get_if_addrs() {
-        Ok(addrs) => addrs
-            .into_iter()
-            .map(|i| NetworkInterfaceInfo {
-                name: i.name.clone(),
-                addr: i.ip().to_string(),
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
 
-    let active_window = get_active_window_info().await;
+
+    let active_window = get_enhanced_active_window_info().await;
 
     SystemContext {
         username,
         hostname,
         os_name,
         os_version,
-        kernel_version,
-        uptime_secs,
-        total_memory_mb,
-        used_memory_mb,
         processes_top: procs,
         active_window,
-        interfaces,
     }
 }
 
-/// 获取活跃窗口信息（跨平台支持）
+/// 获取增强的活跃窗口信息（包含追踪数据）
+async fn get_enhanced_active_window_info() -> Option<ActiveWindowInfo> {
+    use crate::window_tracker::WINDOW_TRACKER;
+    
+    // 获取窗口信息和统计数据
+    let window_info = WINDOW_TRACKER.get_current_window_info().await?;
+    let stats = WINDOW_TRACKER.get_stats().await;
+    let recent_switches = WINDOW_TRACKER.get_switch_history(Some(5)).await;
+    
+    Some(ActiveWindowInfo {
+        app_name: window_info.app_name,
+        window_title: window_info.window_title,
+        bounds: window_info.bounds,
+        timestamp: Some(window_info.timestamp),
+        process_id: window_info.process_id,
+        switch_stats: Some(stats),
+        recent_switches: Some(recent_switches),
+    })
+}
+
+/// 获取活跃窗口信息（跨平台支持）- 保持向后兼容
 async fn get_active_window_info() -> Option<ActiveWindowInfo> {
     #[cfg(target_os = "macos")]
     {
@@ -217,6 +212,10 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
                 app_name,
                 window_title,
                 bounds,
+                timestamp: None,
+                process_id: None,
+                switch_stats: None,
+                recent_switches: None,
             })
         }
     }
@@ -294,6 +293,10 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
                     app_name,
                     window_title,
                     bounds,
+                    timestamp: None,
+                    process_id: Some(process_id),
+                    switch_stats: None,
+                    recent_switches: None,
                 })
             }
         }
@@ -308,15 +311,11 @@ async fn get_active_window_info() -> Option<ActiveWindowInfo> {
 pub fn format_context_as_text(ctx: &SystemContext) -> String {
     let mut s = String::new();
     s.push_str(&format!(
-        "用户: {}\n主机: {}\nOS: {} {}\n内核: {}\n开机时长: {} 秒\n内存: {}/{} MB\n",
+        "用户: {}\n主机: {}\nOS: {} {}\n",
         ctx.username,
         ctx.hostname.clone().unwrap_or_default(),
         ctx.os_name.clone().unwrap_or_default(),
-        ctx.os_version.clone().unwrap_or_default(),
-        ctx.kernel_version.clone().unwrap_or_default(),
-        ctx.uptime_secs,
-        ctx.used_memory_mb,
-        ctx.total_memory_mb
+        ctx.os_version.clone().unwrap_or_default()
     ));
 
     if let Some(w) = &ctx.active_window {
@@ -325,23 +324,55 @@ pub fn format_context_as_text(ctx: &SystemContext) -> String {
             w.app_name.clone().unwrap_or("未知".to_string()),
             w.window_title.clone().unwrap_or("未知".to_string())
         ));
+        
+        // 添加窗口切换统计信息
+        if let Some(stats) = &w.switch_stats {
+            s.push_str(&format!(
+                "窗口切换统计:\n  - 总切换次数: {}\n  - 当前会话时长: {:.1}分钟\n",
+                stats.total_switches,
+                stats.current_session_duration_ms as f64 / 60000.0
+            ));
+            
+            if !stats.most_used_apps.is_empty() {
+                s.push_str("  - 最常用应用:\n");
+                for (app, duration) in stats.most_used_apps.iter().take(3) {
+                    s.push_str(&format!(
+                        "    * {}: {:.1}分钟\n",
+                        app,
+                        *duration as f64 / 60000.0
+                    ));
+                }
+            }
+        }
+        
+        // 添加最近的窗口切换记录
+        if let Some(switches) = &w.recent_switches {
+            if !switches.is_empty() {
+                s.push_str("最近窗口切换:\n");
+                for switch in switches.iter().take(3) {
+                    let from_app = switch.from_app.as_deref().unwrap_or("未知");
+                    let to_app = switch.to_app.as_deref().unwrap_or("未知");
+                    s.push_str(&format!(
+                        "  - {} -> {} (停留{:.1}秒)\n",
+                        from_app,
+                        to_app,
+                        switch.duration_ms as f64 / 1000.0
+                    ));
+                }
+            }
+        }
     } else {
         s.push_str("前台应用: [需要辅助功能权限]\n窗口标题: [需要辅助功能权限]\n");
     }
 
-    if !ctx.interfaces.is_empty() {
-        s.push_str("网络接口:\n");
-        for ni in &ctx.interfaces {
-            s.push_str(&format!("  - {}: {}\n", ni.name, ni.addr));
-        }
-    }
+
 
     if !ctx.processes_top.is_empty() {
-        s.push_str("Top 进程(按内存):\n");
+        s.push_str("Top 进程:\n");
         for p in &ctx.processes_top {
             s.push_str(&format!(
-                "  - {} | mem: {} MB | cpu: {:.1}%\n",
-                p.name, p.memory_mb, p.cpu_percent
+                "  - {} | cpu: {:.1}%\n",
+                p.name, p.cpu_percent
             ));
         }
     }

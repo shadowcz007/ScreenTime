@@ -1,6 +1,6 @@
 [package]
 name = "screen_time"
-version = "0.3.0"
+version = "0.3.3"
 edition = "2021"
 
 [dependencies]
@@ -15,7 +15,7 @@ base64 = "0.21"
 clap = { version = "4.0", features = ["derive", "env"] }
 sysinfo = "0.30"
 whoami = "1.5"
-get_if_addrs = "0.5"
+
 axum = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -25,4 +25,13 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "processthreadsapi", "psapi", "winbase"] }
+
+[dependencies.lazy_static]
+version = "1.4"
+
+
+
+
+
+
 

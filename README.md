@@ -97,6 +97,20 @@ export SCREENTIME_DATA_DIR=/path/to/your/data
   --data-dir /path/to/ollama/data
 ```
 
+#### 截图保留与删除
+
+- 默认：分析完成后删除截图，控制台会显示 `已删除截图: <路径>`。
+- 保留截图：
+  ```bash
+  ./target/release/screen_time --api-key your_api_key_here --keep-screenshots
+  ```
+- 使用环境变量：
+  ```bash
+  export KEEP_SCREENSHOTS=1
+  ./target/release/screen_time --api-key your_api_key_here
+  ```
+- 特例：`--test-prompt` 模式会强制保留当次截图。
+
 **数据目录结构**（自动创建）：
 ```
 你的数据目录/
@@ -251,6 +265,7 @@ ScreenTime 需要以下系统权限才能正常工作：
 | `--mcp` | - | `false` | 启动 MCP 服务器模式 |
 | `--test-prompt <TEST_PROMPT>` | - | - | 测试新的prompt，使用现有的截图和上下文重新计算 |
 | `--test-log-path <TEST_LOG_PATH>` | `TEST_LOG_PATH` | `test_log.json` | 测试结果保存路径 |
+| `--keep-screenshots` | `KEEP_SCREENSHOTS` | `false` | 分析完成后保留截图文件（默认删除） |
 
 **系统默认目录**:
 - macOS: `~/Library/Application Support/ScreenTime/`
@@ -277,6 +292,7 @@ export SCREENTIME_DATA_DIR=/path/to/your/data
 export IMAGE_TARGET_WIDTH=1440
 export IMAGE_GRAYSCALE=true
 export TEST_LOG_PATH=test_log.json
+export KEEP_SCREENSHOTS=1
 ```
 
 ### 🔧 自定义API端点
@@ -347,7 +363,7 @@ ScreenTime/
 │   ├── service_state.rs     # 服务状态管理
 │   ├── standalone_service.rs # 独立服务实现
 │   └── test_prompt.rs       # 测试prompt功能
-├── examples/                # 示例代码
+
 ├── Cargo.toml              # 项目配置和依赖
 ├── CHANGELOG.md            # 更新日志
 └── README.md               # 项目文档

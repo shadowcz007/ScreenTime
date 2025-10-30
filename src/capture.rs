@@ -132,11 +132,20 @@ async fn perform_capture(
     let ctx_original = context::collect_system_context().await;
     let ctx = convert_context_to_models(&ctx_original);
 
+    // 是否保留截图：显式开关或 test_prompt 模式强制保留
+    let should_keep = config.keep_screenshots || config.test_prompt.is_some();
+
+    let screenshot_path_for_log = if should_keep {
+        Some(screenshot_path_str.to_string())
+    } else {
+        None
+    };
+
     let log = ActivityLog {
         timestamp,
         description: analysis_result.description,
         context: Some(ctx),
-        screenshot_path: Some(screenshot_path_str.to_string()),
+        screenshot_path: screenshot_path_for_log,
         model: Some(config.model.clone()),
         token_usage: analysis_result.token_usage,
     };
@@ -145,6 +154,15 @@ async fn perform_capture(
     match logger::save_activity_log(&log, config) {
         Ok(_) => println!("💾 日志已保存"),
         Err(e) => eprintln!("保存日志时出错: {}", e),
+    }
+
+    // 非保留模式：删除截图文件（无论分析成功或失败都执行到此）
+    if !should_keep {
+        if let Err(e) = std::fs::remove_file(screenshot_path_str) {
+            eprintln!("删除截图失败: {}", e);
+        } else {
+            println!("🧹 已删除截图: {}", screenshot_path_str);
+        }
     }
 
     // 更新截屏计数
