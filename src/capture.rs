@@ -99,6 +99,8 @@ async fn perform_capture(
     };
     let screenshot_path_str = screenshot_path.to_str().unwrap_or("screenshot.png");
 
+    println!("────────── {} ──────────", timestamp.format("%H:%M:%S"));
+
     // 确定图片处理参数
     let target_width = if config.image_target_width > 0 {
         Some(config.image_target_width)
@@ -213,19 +215,25 @@ async fn analyze_screenshot_with_retry(
         .await
         {
             Ok(analysis_result) => {
-                println!("✅ 分析成功: {}", analysis_result.description);
+                println!("✅ 分析成功:");
+                for line in analysis_result.description.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        println!("   {}", trimmed);
+                    }
+                }
                 if let Some(ref token_usage) = analysis_result.token_usage {
                     println!(
-                        "Token使用情况 - 输入: {:?}, 输出: {:?}, 总计: {:?}, 计算耗时: {:.2}秒，截图时间: {}",
-                        token_usage.prompt_tokens,
-                        token_usage.completion_tokens,
-                        token_usage.total_tokens,
+                        "   Token: 输入 {}, 输出 {}, 总计 {} · 耗时 {:.2}s · {}",
+                        token_usage.prompt_tokens.unwrap_or(0),
+                        token_usage.completion_tokens.unwrap_or(0),
+                        token_usage.total_tokens.unwrap_or(0),
                         analysis_result.processing_time.as_secs_f64(),
                         timestamp.format("%Y-%m-%d %H:%M:%S")
                     );
                 } else {
                     println!(
-                        "计算耗时: {:.2}秒，截图时间: {}",
+                        "   耗时 {:.2}s · {}",
                         analysis_result.processing_time.as_secs_f64(),
                         timestamp.format("%Y-%m-%d %H:%M:%S")
                     );

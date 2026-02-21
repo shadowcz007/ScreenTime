@@ -74,7 +74,9 @@ pub async fn run_reporter_loop(config: Config) {
         if let Err(e) = send_wake(&url, &token, &text).await {
             eprintln!("⚠️ OpenClaw 上报失败: {}", e);
         } else {
+            println!();
             println!("📤 OpenClaw 上报成功，本周期 {} 条记录", logs.len());
+            println!();
         }
     }
 }
