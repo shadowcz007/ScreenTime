@@ -1,5 +1,6 @@
 use crate::models::ActivityLog;
 use crate::config::Config;
+use chrono::Local;
 use std::error::Error;
 use std::fs::{self, File};
 use std::io::BufWriter;
@@ -75,6 +76,40 @@ pub fn load_recent_daily_logs(config: &Config, days: u32) -> Result<Vec<Activity
     all_logs.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     
     Ok(all_logs)
+}
+
+/// 读取指定时间点以来的活动日志（用于 OpenClaw 上报）
+pub fn load_activity_logs_since(
+    config: &Config,
+    since: chrono::DateTime<Local>,
+) -> Result<Vec<ActivityLog>, Box<dyn Error + Send + Sync>> {
+    let today = Local::now().date_naive();
+    let date_str = today.format("%Y-%m-%d").to_string();
+    let logs = load_daily_activity_logs(config, &date_str)?;
+    Ok(logs
+        .into_iter()
+        .filter(|log| log.timestamp >= since)
+        .collect())
+}
+
+/// 将活动日志格式化为 OpenClaw /hooks/wake 的 text 内容
+pub fn format_logs_for_openclaw(logs: &[ActivityLog], interval_minutes: u64) -> String {
+    if logs.is_empty() {
+        return format!(
+            "ScreenTime 过去{}分钟：无新记录。",
+            interval_minutes
+        );
+    }
+    let mut s = format!("ScreenTime 过去{}分钟摘要（共{}条）：\n", interval_minutes, logs.len());
+    for (i, log) in logs.iter().enumerate() {
+        s.push_str(&format!(
+            "{}. {} {}\n",
+            i + 1,
+            log.timestamp.format("%Y-%m-%d %H:%M:%S"),
+            log.description.trim()
+        ));
+    }
+    s
 }
 
 /// 获取最近N条活动日志的timestamp和description，用于AI分析的上下文
