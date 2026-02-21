@@ -19,15 +19,19 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_name: screen_time-linux-x86_64
+            binary_name: screen_time
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact_name: screen_time-windows-x86_64.exe
+            binary_name: screen_time.exe
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact_name: screen_time-macos-x86_64
+            binary_name: screen_time
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact_name: screen_time-macos-aarch64
+            binary_name: screen_time
 
     steps:
       - name: Checkout
@@ -46,11 +50,7 @@ jobs:
       - name: Build release
         run: |
           cargo build --release --target ${{ matrix.target }}
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp target/${{ matrix.target }}/release/screen_time.exe ${{ matrix.artifact_name }}
-          else
-            cp target/${{ matrix.target }}/release/screen_time ${{ matrix.artifact_name }}
-          fi
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.artifact_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
