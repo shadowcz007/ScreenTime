@@ -224,7 +224,10 @@ export SILICONFLOW_MODEL=llava:7b
 
 #### 6. OpenClaw 上报
 
-将 ScreenTime 的计算结果（过去 N 分钟的本机活动摘要）定期提交到 [OpenClaw](https://docs.openclaw.ai/) Gateway 的 **/hooks/agent**，由智能体做总结并可在主会话/渠道中看到。**仅当同时提供 `--openclaw-url` 和 `--openclaw-token` 时才会启用**，默认每 30 分钟提交一次。`--openclaw-url` 需填写**完整的 agent webhook 地址**（含路径，如 `http://host:port/hooks/agent`）。
+将 ScreenTime 的计算结果（过去 N 分钟的本机活动摘要）定期提交到 [OpenClaw](https://docs.openclaw.ai/) Gateway 的 **/hooks/agent**，由智能体做总结并可在主会话/渠道中看到。**仅当同时提供 `--openclaw-url` 和 `--openclaw-token` 时才会启用**，默认每 30 分钟提交一次。
+
+- **URL**：`--openclaw-url` 需填写**完整的 agent webhook 地址**（含路径，如 `http://host:port/hooks/agent`）。
+- **Token**：`--openclaw-token` 必须与 OpenClaw Gateway 配置中的 **`hooks.token`** 完全一致（字符、首尾空格均需一致），否则会返回 401 Unauthorized。建议从 Gateway 配置中直接复制粘贴。
 
 ```bash
 # 启用 OpenClaw agent 上报（默认每 30 分钟）
@@ -255,7 +258,7 @@ curl -X POST http://127.0.0.1:18789/hooks/agent \
   -d '{"message":"用户电脑设备在过去30分钟内的活动摘要（共0条）：测试。请总结。","name":"ScreenTime","wakeMode":"now","deliver":true}'
 ```
 
-成功时返回 `200`，OpenClaw 主会话中会出现对应系统事件。
+成功时返回 **202 Accepted**（异步已接受），智能体会在后台处理并总结，主会话/渠道中可见。
 
 ## 🔐 权限要求
 
