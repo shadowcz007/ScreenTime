@@ -144,11 +144,11 @@ pub struct Config {
     )]
     pub control_port: u16,
 
-    /// OpenClaw webhook full URL (e.g. http://127.0.0.1:18789/hooks/wake). When set with openclaw-token, ScreenTime will POST summaries to this URL at the given interval.
-    #[clap(long, env = "OPENCLAW_URL", help = "OpenClaw webhook 完整 URL（含路径），与 openclaw-token 同时设置时启用上报")]
+    /// OpenClaw agent webhook full URL (e.g. http://127.0.0.1:18789/hooks/agent). When set with openclaw-token, ScreenTime will POST summaries to this URL for the agent to summarize.
+    #[clap(long, env = "OPENCLAW_URL", help = "OpenClaw agent 完整 URL（如 .../hooks/agent），与 openclaw-token 同时设置时启用上报")]
     pub openclaw_url: Option<String>,
 
-    /// OpenClaw webhook token for /hooks/wake. Required when openclaw-url is set.
+    /// OpenClaw webhook token for /hooks/agent. Required when openclaw-url is set.
     #[clap(long, env = "OPENCLAW_TOKEN", help = "OpenClaw webhook 令牌")]
     pub openclaw_token: Option<String>,
 

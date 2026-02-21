@@ -92,7 +92,7 @@ pub fn load_activity_logs_since(
         .collect())
 }
 
-/// 将活动日志格式化为 OpenClaw /hooks/wake 的 text 内容
+/// 将活动日志格式化为 OpenClaw /hooks/agent 的 message 内容
 pub fn format_logs_for_openclaw(logs: &[ActivityLog], interval_minutes: u64) -> String {
     if logs.is_empty() {
         return format!(
