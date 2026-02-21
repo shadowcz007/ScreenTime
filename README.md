@@ -224,24 +224,24 @@ export SILICONFLOW_MODEL=llava:7b
 
 #### 6. OpenClaw 上报
 
-将 ScreenTime 的计算结果（过去 N 分钟的活动摘要）定期发送到 [OpenClaw](https://docs.openclaw.ai/) Gateway 的 `/hooks/wake`，可在主会话中看到屏幕使用摘要。**仅当同时提供 `--openclaw-url` 和 `--openclaw-token` 时才会启用**，默认每 30 分钟上报一次。
+将 ScreenTime 的计算结果（过去 N 分钟的活动摘要）定期发送到 [OpenClaw](https://docs.openclaw.ai/) Gateway 的 webhook，可在主会话中看到屏幕使用摘要。**仅当同时提供 `--openclaw-url` 和 `--openclaw-token` 时才会启用**，默认每 30 分钟上报一次。`--openclaw-url` 需填写**完整的 webhook 地址**（含路径，如 `/hooks/wake`），以便 hooks 路径变更时无需改代码。
 
 ```bash
 # 启用 OpenClaw 上报（默认每 30 分钟）
 ./target/release/screen_time \
   --api-key your_api_key_here \
-  --openclaw-url http://127.0.0.1:18789 \
+  --openclaw-url http://127.0.0.1:18789/hooks/wake \
   --openclaw-token YOUR_WEBHOOK_TOKEN
 
 # 使用环境变量
-export OPENCLAW_URL=http://127.0.0.1:18789
+export OPENCLAW_URL=http://127.0.0.1:18789/hooks/wake
 export OPENCLAW_TOKEN=YOUR_WEBHOOK_TOKEN
 ./target/release/screen_time --api-key your_api_key_here
 
 # 自定义上报间隔（例如每 15 分钟）
 ./target/release/screen_time \
   --api-key your_api_key_here \
-  --openclaw-url http://127.0.0.1:18789 \
+  --openclaw-url http://127.0.0.1:18789/hooks/wake \
   --openclaw-token YOUR_WEBHOOK_TOKEN \
   --openclaw-report-interval-minutes 15
 ```
@@ -305,7 +305,7 @@ ScreenTime 需要以下系统权限才能正常工作：
 | `--test-prompt <TEST_PROMPT>` | - | - | 测试新的prompt，使用现有的截图和上下文重新计算 |
 | `--test-log-path <TEST_LOG_PATH>` | `TEST_LOG_PATH` | `test_log.json` | 测试结果保存路径 |
 | `--keep-screenshots` | `KEEP_SCREENSHOTS` | `false` | 分析完成后保留截图文件（默认删除） |
-| `--openclaw-url <URL>` | `OPENCLAW_URL` | - | OpenClaw 网关地址；与 `--openclaw-token` 同时设置时启用上报 |
+| `--openclaw-url <URL>` | `OPENCLAW_URL` | - | OpenClaw webhook 完整 URL（含路径，如 `http://host:port/hooks/wake`）；与 `--openclaw-token` 同时设置时启用上报 |
 | `--openclaw-token <TOKEN>` | `OPENCLAW_TOKEN` | - | OpenClaw webhook 令牌 |
 | `--openclaw-report-interval-minutes <MINUTES>` | `OPENCLAW_REPORT_INTERVAL_MINUTES` | `30` | 向 OpenClaw 上报的间隔（分钟） |
 
@@ -336,8 +336,8 @@ export IMAGE_GRAYSCALE=true
 export TEST_LOG_PATH=test_log.json
 export KEEP_SCREENSHOTS=1
 
-# OpenClaw 上报（可选）
-export OPENCLAW_URL=http://127.0.0.1:18789
+# OpenClaw 上报（可选，URL 为完整 webhook 地址）
+export OPENCLAW_URL=http://127.0.0.1:18789/hooks/wake
 export OPENCLAW_TOKEN=your_webhook_token
 export OPENCLAW_REPORT_INTERVAL_MINUTES=30
 ```

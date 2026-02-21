@@ -13,19 +13,19 @@ struct WakeBody<'a> {
     mode: &'static str,
 }
 
-/// 向 OpenClaw 发送 wake 请求
+/// 向 OpenClaw 发送 wake 请求（url 为完整 webhook 地址，如 https://host:port/hooks/wake）
 pub async fn send_wake(
-    base_url: &str,
+    url: &str,
     token: &str,
     text: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let url = format!("{}/hooks/wake", base_url.trim_end_matches('/'));
+    let url = url.trim_end_matches('/');
     let client = reqwest::Client::builder()
         .timeout(StdDuration::from_secs(15))
         .build()?;
     let body = WakeBody { text, mode: "now" };
     let res = client
-        .post(&url)
+        .post(url)
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .json(&body)
@@ -52,7 +52,7 @@ pub async fn run_reporter_loop(config: Config) {
     println!(
         "📤 OpenClaw 上报已启用：每 {} 分钟向 {} 发送摘要",
         interval_minutes,
-        url.trim_end_matches('/')
+        url
     );
 
     let mut interval = tokio::time::interval(interval_duration);
@@ -65,16 +65,16 @@ pub async fn run_reporter_loop(config: Config) {
         let logs = match logger::load_activity_logs_since(&config, since) {
             Ok(l) => l,
             Err(e) => {
-                tracing::warn!("读取活动日志失败，跳过本次 OpenClaw 上报: {}", e);
+                eprintln!("⚠️ 读取活动日志失败，跳过本次 OpenClaw 上报: {}", e);
                 continue;
             }
         };
         let text = logger::format_logs_for_openclaw(&logs, interval_minutes);
 
         if let Err(e) = send_wake(&url, &token, &text).await {
-            tracing::warn!("OpenClaw 上报失败: {}", e);
+            eprintln!("⚠️ OpenClaw 上报失败: {}", e);
         } else {
-            tracing::debug!("OpenClaw 上报成功，本周期 {} 条记录", logs.len());
+            println!("📤 OpenClaw 上报成功，本周期 {} 条记录", logs.len());
         }
     }
 }

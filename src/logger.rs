@@ -96,11 +96,11 @@ pub fn load_activity_logs_since(
 pub fn format_logs_for_openclaw(logs: &[ActivityLog], interval_minutes: u64) -> String {
     if logs.is_empty() {
         return format!(
-            "ScreenTime 过去{}分钟：无新记录。",
+            "用户电脑设备在过去{}分钟内的活动无新记录。",
             interval_minutes
         );
     }
-    let mut s = format!("ScreenTime 过去{}分钟摘要（共{}条）：\n", interval_minutes, logs.len());
+    let mut s = format!("用户电脑设备在过去{}分钟内的活动摘要（共{}条）：\n", interval_minutes, logs.len());
     for (i, log) in logs.iter().enumerate() {
         s.push_str(&format!(
             "{}. {} {}\n",
