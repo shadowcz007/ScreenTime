@@ -1,5 +1,14 @@
 # 更新日志
 
+## [1.0.0] - 2025-02-21
+
+### 新增功能 🚀
+- **OpenClaw 上报**: 支持将 ScreenTime 计算结果按可配置间隔（默认 30 分钟）发送到 OpenClaw Gateway 的 `/hooks/wake`。
+  - 新增 `--openclaw-url`、`--openclaw-token`（同时配置时启用上报）。
+  - 新增 `--openclaw-report-interval-minutes`（默认 30）。
+
+---
+
 ## [0.3.3] - 2025-10-30
 
 ### 行为变更

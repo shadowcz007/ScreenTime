@@ -143,6 +143,23 @@ pub struct Config {
         env = "SERVICE_CONTROL_PORT"
     )]
     pub control_port: u16,
+
+    /// OpenClaw webhook full URL (e.g. http://127.0.0.1:18789/hooks/wake). When set with openclaw-token, ScreenTime will POST summaries to this URL at the given interval.
+    #[clap(long, env = "OPENCLAW_URL", help = "OpenClaw webhook 完整 URL（含路径），与 openclaw-token 同时设置时启用上报")]
+    pub openclaw_url: Option<String>,
+
+    /// OpenClaw webhook token for /hooks/wake. Required when openclaw-url is set.
+    #[clap(long, env = "OPENCLAW_TOKEN", help = "OpenClaw webhook 令牌")]
+    pub openclaw_token: Option<String>,
+
+    /// Interval in minutes between OpenClaw report (default 30). Only used when openclaw-url and openclaw-token are set.
+    #[clap(
+        long,
+        default_value = "30",
+        env = "OPENCLAW_REPORT_INTERVAL_MINUTES",
+        help = "向 OpenClaw 上报的间隔（分钟）"
+    )]
+    pub openclaw_report_interval_minutes: u64,
 }
 
 impl Config {
@@ -222,6 +239,12 @@ impl Config {
     /// 获取控制端口（Windows系统使用）
     pub fn get_control_port(&self) -> u16 {
         self.control_port
+    }
+
+    /// 是否启用 OpenClaw 上报（url 与 token 均提供时为 true）
+    pub fn openclaw_enabled(&self) -> bool {
+        self.openclaw_url.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
+            && self.openclaw_token.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
     }
 
     /// 生成配置哈希值

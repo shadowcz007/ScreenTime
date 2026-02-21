@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::openclaw;
 use crate::service_state::ServiceStateManager;
 use crate::capture;
 use crate::models::{CaptureServiceStatus, ServiceCommand, ServiceResponse};
@@ -102,6 +103,14 @@ impl StandaloneService {
                     shutdown_tx,
                     capture_handle
                 ).await;
+            });
+        }
+
+        // 若配置了 OpenClaw，启动定期上报任务
+        if self.config.openclaw_enabled() {
+            let config = self.config.clone();
+            tokio::spawn(async move {
+                openclaw::run_reporter_loop(config).await;
             });
         }
         

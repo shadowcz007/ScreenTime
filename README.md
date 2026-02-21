@@ -4,6 +4,9 @@
 
 ## 📋 更新日志
 
+### v1.0 (2025-02-21)
+- 📤 **OpenClaw 上报**: 支持将 ScreenTime 计算结果按可配置间隔（默认 30 分钟）发送到 OpenClaw Gateway 的 `/hooks/wake`；需同时配置 `--openclaw-url` 与 `--openclaw-token` 才启用。
+
 ### v0.3.0 (2024-12-19)
 - 🔧 **重大重构**: 配置简化优化，移除复杂的路径配置参数
 - 💰 **新增**: Token使用统计功能，实时显示AI分析的token消耗
@@ -53,6 +56,7 @@
 - **⚙️ 简化配置**: 约定大于配置，只需设置数据根目录即可
 - **🌐 Web 服务**: 内置 SSE (Server-Sent Events) 服务器，支持实时数据推送
 - **🔧 自定义API**: 支持配置自定义API端点，包括SiliconFlow和Ollama等本地模型
+- **📤 OpenClaw 上报**: 可选将过去 N 分钟的 ScreenTime 摘要发送到 OpenClaw Gateway，便于与主会话联动
 - **🧪 测试功能**: 支持使用新prompt重新分析现有截图，便于优化分析效果
 
 ## 🚀 快速开始
@@ -218,6 +222,41 @@ export SILICONFLOW_MODEL=llava:7b
 - `llava:34b` - 最高性能的视觉语言模型
 - 其他支持视觉的 Ollama 模型
 
+#### 6. OpenClaw 上报
+
+将 ScreenTime 的计算结果（过去 N 分钟的活动摘要）定期发送到 [OpenClaw](https://docs.openclaw.ai/) Gateway 的 webhook，可在主会话中看到屏幕使用摘要。**仅当同时提供 `--openclaw-url` 和 `--openclaw-token` 时才会启用**，默认每 30 分钟上报一次。`--openclaw-url` 需填写**完整的 webhook 地址**（含路径，如 `/hooks/wake`），以便 hooks 路径变更时无需改代码。
+
+```bash
+# 启用 OpenClaw 上报（默认每 30 分钟）
+./target/release/screen_time \
+  --api-key your_api_key_here \
+  --openclaw-url http://127.0.0.1:18789/hooks/wake \
+  --openclaw-token YOUR_WEBHOOK_TOKEN
+
+# 使用环境变量
+export OPENCLAW_URL=http://127.0.0.1:18789/hooks/wake
+export OPENCLAW_TOKEN=YOUR_WEBHOOK_TOKEN
+./target/release/screen_time --api-key your_api_key_here
+
+# 自定义上报间隔（例如每 15 分钟）
+./target/release/screen_time \
+  --api-key your_api_key_here \
+  --openclaw-url http://127.0.0.1:18789/hooks/wake \
+  --openclaw-token YOUR_WEBHOOK_TOKEN \
+  --openclaw-report-interval-minutes 15
+```
+
+**测试 OpenClaw 连接**（不依赖 ScreenTime 运行）：
+
+```bash
+curl -X POST http://127.0.0.1:18789/hooks/wake \
+  -H 'Authorization: Bearer YOUR_WEBHOOK_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"ScreenTime 测试：手动 curl 验证","mode":"now"}'
+```
+
+成功时返回 `200`，OpenClaw 主会话中会出现对应系统事件。
+
 ## 🔐 权限要求
 
 ScreenTime 需要以下系统权限才能正常工作：
@@ -266,6 +305,9 @@ ScreenTime 需要以下系统权限才能正常工作：
 | `--test-prompt <TEST_PROMPT>` | - | - | 测试新的prompt，使用现有的截图和上下文重新计算 |
 | `--test-log-path <TEST_LOG_PATH>` | `TEST_LOG_PATH` | `test_log.json` | 测试结果保存路径 |
 | `--keep-screenshots` | `KEEP_SCREENSHOTS` | `false` | 分析完成后保留截图文件（默认删除） |
+| `--openclaw-url <URL>` | `OPENCLAW_URL` | - | OpenClaw webhook 完整 URL（含路径，如 `http://host:port/hooks/wake`）；与 `--openclaw-token` 同时设置时启用上报 |
+| `--openclaw-token <TOKEN>` | `OPENCLAW_TOKEN` | - | OpenClaw webhook 令牌 |
+| `--openclaw-report-interval-minutes <MINUTES>` | `OPENCLAW_REPORT_INTERVAL_MINUTES` | `30` | 向 OpenClaw 上报的间隔（分钟） |
 
 **系统默认目录**:
 - macOS: `~/Library/Application Support/ScreenTime/`
@@ -293,6 +335,11 @@ export IMAGE_TARGET_WIDTH=1440
 export IMAGE_GRAYSCALE=true
 export TEST_LOG_PATH=test_log.json
 export KEEP_SCREENSHOTS=1
+
+# OpenClaw 上报（可选，URL 为完整 webhook 地址）
+export OPENCLAW_URL=http://127.0.0.1:18789/hooks/wake
+export OPENCLAW_TOKEN=your_webhook_token
+export OPENCLAW_REPORT_INTERVAL_MINUTES=30
 ```
 
 ### 🔧 自定义API端点
@@ -362,6 +409,7 @@ ScreenTime/
 │   ├── mcp_service.rs       # MCP 服务实现
 │   ├── service_state.rs     # 服务状态管理
 │   ├── standalone_service.rs # 独立服务实现
+│   ├── openclaw.rs          # OpenClaw webhook 上报
 │   └── test_prompt.rs       # 测试prompt功能
 
 ├── Cargo.toml              # 项目配置和依赖
@@ -473,6 +521,7 @@ logs/
 5. **网络连接**: 需要稳定的网络连接以调用 AI 分析服务
 6. **管理员权限**: Windows 系统可能需要管理员权限来获取完整的窗口信息
 7. **自定义API**: 使用自定义API端点时，请确保端点支持与官方API相同的接口格式
+8. **OpenClaw 安全**: 使用 OpenClaw 上报时，建议将 Gateway 的 webhook 端点置于 loopback、tailnet 或受信任反向代理之后，并使用专用 webhook 令牌
 
 ## 🤝 贡献
 
