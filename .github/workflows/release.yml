@@ -3,14 +3,14 @@ name: Release
 on:
   push:
     tags:
-      - 'v*' # 当推送以v开头的标签时触发
+      - 'v*'   # 推送 v 开头的 tag 时触发（如 v1.0.0）
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-    name: Build for ${{ matrix.target }}
+    name: Build ${{ matrix.artifact_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -25,12 +25,15 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact_name: screen_time-macos-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_name: screen_time-macos-aarch64
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
@@ -40,7 +43,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - name: Build release binary
+      - name: Build release
         run: |
           cargo build --release --target ${{ matrix.target }}
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
@@ -63,54 +66,65 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      - name: Prepare release assets
+        run: |
+          mkdir -p dist
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            if [ -f "artifacts/$name/$name" ]; then
+              cp "artifacts/$name/$name" "dist/$name"
+            fi
+          done
+          ls -la dist/
+
       - name: Get version from tag
-        id: get_version
+        id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
         id: changelog
         run: |
-          # 获取上一个标签
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
-          
-          if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD)
+          CURRENT="${{ steps.version.outputs.VERSION }}"
+          PREVIOUS=$(git describe --tags --abbrev=0 "${CURRENT}^" 2>/dev/null || echo "")
+          if [ -n "$PREVIOUS" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s" "$PREVIOUS..$CURRENT")
           else
             CHANGELOG=$(git log --pretty=format:"- %s" --reverse)
           fi
-          
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
-          name: Release ${{ steps.get_version.outputs.VERSION }}
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ steps.version.outputs.VERSION }}
           body: |
             ## 更新内容
-            
+
             ${{ steps.changelog.outputs.CHANGELOG }}
-            
+
             ## 下载
-            
-            请根据您的操作系统选择相应的二进制文件：
-            
-            - **Linux**: `screen_time-linux-x86_64`
-            - **Windows**: `screen_time-windows-x86_64.exe`
-            - **macOS**: `screen_time-macos-x86_64`
-          files: |
-            artifacts/screen_time-linux-x86_64
-            artifacts/screen_time-windows-x86_64.exe
-            artifacts/screen_time-macos-x86_64
+
+            按系统选择对应二进制：
+
+            | 系统 | 文件 |
+            |------|------|
+            | Linux x86_64 | `screen_time-linux-x86_64` |
+            | Windows x86_64 | `screen_time-windows-x86_64.exe` |
+            | macOS Intel | `screen_time-macos-x86_64` |
+            | macOS Apple Silicon | `screen_time-macos-aarch64` |
+          files: dist/*
           draft: false
           prerelease: false
