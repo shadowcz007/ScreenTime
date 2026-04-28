@@ -496,6 +496,9 @@ OpenRecall/
 ├── logs/                   # 按日期分类的日志（自动创建）
 │   ├── 2024-01-01.json
 │   └── ...
+├── logs_md/                # 按日期分类的可读 Markdown 日志（自动创建）
+│   ├── 2024-01-01.md
+│   └── ...
 ├── clipboards/             # 剪贴板数据（自动创建）
 │   ├── history.json        # 剪贴板历史记录
 │   ├── index.json          # 去重索引
@@ -598,6 +601,24 @@ logs/
 6. **管理员权限**: Windows 系统可能需要管理员权限来获取完整的窗口信息
 7. **自定义API**: 使用自定义API端点时，请确保端点支持与官方API相同的接口格式
 8. **OpenClaw 安全**: 使用 OpenClaw 上报时，建议将 Gateway 的 webhook 端点置于 loopback、tailnet 或受信任反向代理之后，并使用专用 webhook 令牌
+
+## 🔎 定位与排查
+
+当分析结果异常（如误识别软件、剪贴板未保存、AI 过滤不符合预期）时，建议按下列顺序定位：
+
+1. **看终端实时输出**：确认截屏循环是否在运行、API 是否请求成功、是否存在重试。
+2. **看活动 JSON 日志**：`logs/YYYY-MM-DD.json`，用于程序化核对（时间、描述、模型、token）。
+3. **看可读 Markdown 日志**：`logs_md/YYYY-MM-DD.md`，用于人工快速回放每次分析结果。
+4. **看剪贴板事件日志**：`clipboards/events.log`，重点关注：
+   - `clipboard_fetch`（是否采集到内容）
+   - `clipboard_ai`（save/category/reason）
+   - `clipboard_save`（是否 `skip_by_ai` 或已保存）
+5. **核对 `.env` 与热重载**：修改 `.env` 后观察终端是否出现重载提示（间隔变化、策略变化）。
+
+常见问题建议：
+- **误识别未安装软件**：开启 `INSTALLED_APPS_ENABLED=true`，并优化 `SCREEN_ANALYSIS_PROMPT`（要求无证据时输出“未知软件”）。
+- **关键词被误跳过**：降低 `CLIPBOARD_AI_MIN_CHARS`（如 6），并强化 `CLIPBOARD_AI_FILTER_PROMPT` 对关键词组合的保留规则。
+- **AI 过滤日志不清晰**：检查 `skip_by_ai` 行是否含 `reason/category`，若无通常是旧进程未重启。
 
 ## 🤝 贡献
 

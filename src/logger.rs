@@ -3,7 +3,7 @@ use crate::config::Config;
 use chrono::Local;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 
 /// 保存活动日志（按日期分类存储）
 pub fn save_activity_log(log: &ActivityLog, config: &Config) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -34,9 +34,78 @@ pub fn save_activity_log(log: &ActivityLog, config: &Config) -> Result<(), Box<d
     let file = File::create(&daily_log_path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &logs)?;
+
+    // 同步保存可读 Markdown 日志
+    save_activity_log_markdown(log, config)?;
     
     println!("📝 日志已保存到: {}", daily_log_path.display());
     
+    Ok(())
+}
+
+/// 保存可读的 Markdown 活动日志（按日期追加）
+fn save_activity_log_markdown(
+    log: &ActivityLog,
+    config: &Config,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let date = log.timestamp.format("%Y-%m-%d").to_string();
+    let logs_md_dir = config.get_data_dir().join("logs_md");
+    if !logs_md_dir.exists() {
+        fs::create_dir_all(&logs_md_dir)?;
+    }
+
+    let daily_md_path = logs_md_dir.join(format!("{}.md", date));
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&daily_md_path)?;
+
+    let status_line = if log.description.trim().is_empty() {
+        "失败/空结果".to_string()
+    } else {
+        "成功".to_string()
+    };
+
+    let app = log
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.active_app.clone())
+        .unwrap_or_else(|| "未知软件".to_string());
+
+    let title = log
+        .context
+        .as_ref()
+        .and_then(|ctx| ctx.window_title.clone())
+        .unwrap_or_else(|| "-".to_string());
+
+    let token_line = match &log.token_usage {
+        Some(token) => format!(
+            "输入 {} / 输出 {} / 总计 {}",
+            token.prompt_tokens.unwrap_or(0),
+            token.completion_tokens.unwrap_or(0),
+            token.total_tokens.unwrap_or(0)
+        ),
+        None => "-".to_string(),
+    };
+
+    let screenshot_line = match &log.screenshot_path {
+        Some(path) => path.clone(),
+        None => "已删除".to_string(),
+    };
+
+    let md = format!(
+        "## {}\n\n- 状态: {}\n- 软件: {}\n- 窗口: {}\n- 模型: {}\n- Token: {}\n- 截图: {}\n\n### AI 输出\n> {}\n\n---\n\n",
+        log.timestamp.format("%H:%M:%S"),
+        status_line,
+        app,
+        title,
+        log.model.clone().unwrap_or_else(|| "-".to_string()),
+        token_line,
+        screenshot_line,
+        log.description.replace('\n', "\n> ")
+    );
+
+    file.write_all(md.as_bytes())?;
     Ok(())
 }
 

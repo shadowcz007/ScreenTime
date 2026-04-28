@@ -1,5 +1,40 @@
 # 更新日志
 
+## [1.1.0] - 2026-04-28
+
+### 新增功能 🚀
+- **工程化 `.env` 启动与热重载**:
+  - 启动时自动加载项目根目录 `.env`（零传参启动）。
+  - 运行中修改 `.env` 自动生效（截屏间隔、剪贴板轮询、AI 过滤等配置）。
+- **剪贴板 AI 过滤保存**:
+  - 新增 `CLIPBOARD_AI_FILTER_*` 配置，支持按提示词判断 `save=true/false`。
+  - 允许自定义过滤提示词，同时程序端固定要求 JSON 结构输出，确保解析稳定。
+  - `skip_by_ai` 日志包含 `reason/category`，便于回溯。
+- **剪贴板采集可读性升级**:
+  - 自动保存文件命名升级为 `YYYYMMDD_HHMMSS_<short_hash>_<slug>.md`，并带重名后缀兜底。
+  - 新增剪贴板事件日志 `clipboards/events.log`，并默认同步输出到终端。
+- **截图分析上下文增强（macOS）**:
+  - 上下文支持注入“已安装软件清单”（带缓存与刷新周期），减少模型误识别未安装软件。
+  - 新增 `INSTALLED_APPS_*` 配置控制扫描范围、刷新频率和注入上限。
+- **日志双轨输出**:
+  - 保留机器可读 JSON：`logs/YYYY-MM-DD.json`。
+  - 新增人类可读 Markdown：`logs_md/YYYY-MM-DD.md`。
+
+### 配置与默认值调整 ⚙️
+- 默认 API 地址调整为本地：`http://127.0.0.1:1234/v1/chat/completions`。
+- 默认 API Key 调整为：`default`。
+- 默认模型调整为：`default`。
+- 环境变量命名统一去 SiliconFlow 前缀：
+  - `OPENRECALL_API_KEY`
+  - `OPENRECALL_API_URL`
+  - `OPENRECALL_MODEL`
+
+### 文档与排查体验 📚
+- `README` 补充零传参启动、热重载、剪贴板 AI 过滤、已安装软件清单、`logs_md` 与 `events.log` 说明。
+- 补充 `.env.example`，覆盖新增能力并增加中文注释，降低配置门槛。
+
+---
+
 ## [1.0.0] - 2025-02-21
 
 ### 新增功能 🚀
