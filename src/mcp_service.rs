@@ -16,10 +16,10 @@ use crate::standalone_service::ServiceController;
 use crate::config::Config;
 
 #[derive(Clone)]
-pub struct ScreenTimeService {
+pub struct OpenRecallService {
     config: Config,
     service_controller: Arc<ServiceController>,
-    tool_router: ToolRouter<ScreenTimeService>,
+    tool_router: ToolRouter<OpenRecallService>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -37,7 +37,7 @@ pub struct ReadLogsArgs {
 }
 
 #[tool_router]
-impl ScreenTimeService {
+impl OpenRecallService {
     pub fn new(config: Config) -> Self {
         let service_controller = Arc::new(ServiceController::new(&config));
         Self {
@@ -126,13 +126,13 @@ impl ScreenTimeService {
 }
 
 #[tool_handler]
-impl ServerHandler for ScreenTimeService {
+impl ServerHandler for OpenRecallService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation::from_build_env(),
-            instructions: Some("ScreenTime MCP server: tools=monitor, read_logs".to_string()),
+            instructions: Some("OpenRecall MCP server: tools=monitor, read_logs".to_string()),
         }
     }
 }

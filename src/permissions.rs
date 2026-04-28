@@ -210,7 +210,7 @@ pub fn prompt_for_permissions(status: &PermissionStatus) -> Result<(), Box<dyn E
         println!("   - 用途：截取屏幕截图进行分析");
         
         if cfg!(target_os = "macos") {
-            println!("   - 操作：请在弹出的系统偏好设置中，找到 'ScreenTime' 并勾选");
+            println!("   - 操作：请在弹出的系统偏好设置中，找到 'OpenRecall' 并勾选");
             println!("   - 提示：可能需要输入管理员密码");
             println!("\n正在打开屏幕录制权限设置...");
             if let Err(e) = open_permission_settings("screen_recording") {
@@ -234,7 +234,7 @@ pub fn prompt_for_permissions(status: &PermissionStatus) -> Result<(), Box<dyn E
         println!("   - 注意：这有助于AI更准确地分析您的使用情况");
         
         if cfg!(target_os = "macos") {
-            println!("   - 操作：请在弹出的系统偏好设置中，找到 'ScreenTime' 并勾选");
+            println!("   - 操作：请在弹出的系统偏好设置中，找到 'OpenRecall' 并勾选");
             println!("\n正在打开辅助功能权限设置...");
             if let Err(e) = open_permission_settings("accessibility") {
                 eprintln!("无法自动打开设置页面: {}", e);
@@ -254,7 +254,7 @@ pub fn prompt_for_permissions(status: &PermissionStatus) -> Result<(), Box<dyn E
         println!("\n📋 macOS 授权步骤:");
         println!("1. 在弹出的系统偏好设置窗口中");
         println!("2. 点击左下角的锁图标解锁（需要管理员密码）");
-        println!("3. 找到 'ScreenTime' 或 'screen_time' 应用");
+        println!("3. 找到 'OpenRecall' 或 'openrecall' 应用");
         println!("4. 勾选对应的复选框");
         println!("5. 重新启动本程序");
     } else if cfg!(target_os = "windows") {

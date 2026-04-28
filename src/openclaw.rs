@@ -1,4 +1,4 @@
-//! 向 OpenClaw Gateway 的 /hooks/agent 上报 ScreenTime 摘要，由智能体做总结
+//! 向 OpenClaw Gateway 的 /hooks/agent 上报 OpenRecall 摘要，由智能体做总结
 
 use crate::config::Config;
 use crate::logger;
@@ -28,7 +28,7 @@ pub async fn send_agent(
         .build()?;
     let body = AgentBody {
         message,
-        name: "ScreenTime",
+        name: "OpenRecall",
         wake_mode: "now",
         deliver: true,
     };

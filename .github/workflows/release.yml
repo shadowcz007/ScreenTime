@@ -18,16 +18,16 @@ jobs:
         include:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: screen_time-windows-x86_64.exe
-            binary_name: screen_time.exe
+            artifact_name: openrecall-windows-x86_64.exe
+            binary_name: openrecall.exe
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact_name: screen_time-macos-x86_64
-            binary_name: screen_time
+            artifact_name: openrecall-macos-x86_64
+            binary_name: openrecall
           - target: aarch64-apple-darwin
             os: macos-latest
-            artifact_name: screen_time-macos-aarch64
-            binary_name: screen_time
+            artifact_name: openrecall-macos-aarch64
+            binary_name: openrecall
 
     steps:
       - name: Checkout
@@ -117,9 +117,9 @@ jobs:
 
             | 系统 | 文件 |
             |------|------|
-            | Windows x86_64 | `screen_time-windows-x86_64.exe` |
-            | macOS Intel | `screen_time-macos-x86_64` |
-            | macOS Apple Silicon | `screen_time-macos-aarch64` |
+            | Windows x86_64 | `openrecall-windows-x86_64.exe` |
+            | macOS Intel | `openrecall-macos-x86_64` |
+            | macOS Apple Silicon | `openrecall-macos-aarch64` |
           files: dist/*
           draft: false
           prerelease: false

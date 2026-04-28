@@ -15,14 +15,14 @@ mod openclaw; // OpenClaw webhook 上报
 
 use std::error::Error;
 
-use mcp_service::ScreenTimeService;
+use mcp_service::OpenRecallService;
 use standalone_service::{StandaloneService, ServiceController};
 use rmcp::transport::sse_server::{SseServer, SseServerConfig};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
-    println!("🚀 ScreenTime 启动中...\n");
+    println!("🚀 OpenRecall 启动中...\n");
     
     let config = config::Config::from_args();
     
@@ -190,7 +190,7 @@ async fn run_mcp_server(config: config::Config) -> Result<(), Box<dyn Error + Se
     });
 
     let cfg = config.clone();
-    let cancel_token = sse_server.with_service(move || ScreenTimeService::new(cfg.clone()));
+    let cancel_token = sse_server.with_service(move || OpenRecallService::new(cfg.clone()));
 
     println!("✅ MCP 服务器启动成功！ SSE: /sse, POST: /message");
     println!("🌐 CORS 已启用，支持跨域访问");

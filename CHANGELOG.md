@@ -3,7 +3,7 @@
 ## [1.0.0] - 2025-02-21
 
 ### 新增功能 🚀
-- **OpenClaw 上报**: 支持将 ScreenTime 计算结果按可配置间隔（默认 30 分钟）发送到 OpenClaw Gateway 的 `/hooks/wake`。
+- **OpenClaw 上报**: 支持将 OpenRecall 计算结果按可配置间隔（默认 30 分钟）发送到 OpenClaw Gateway 的 `/hooks/wake`。
   - 新增 `--openclaw-url`、`--openclaw-token`（同时配置时启用上报）。
   - 新增 `--openclaw-report-interval-minutes`（默认 30）。
 
@@ -75,9 +75,9 @@
   - `logs/` - 按日期分类的日志文件
   - `service_state.json` - 服务状态文件
 - **默认路径优化**: 
-  - macOS: `~/Library/Application Support/ScreenTime/`
+  - macOS: `~/Library/Application Support/OpenRecall/`
   - Linux: `~/.local/share/screentime/`
-  - Windows: `%APPDATA%/ScreenTime/`
+  - Windows: `%APPDATA%/OpenRecall/`
 
 ### 💰 新增功能 - Token使用统计
 - **Token消耗记录**: 每次AI分析都会记录详细的token使用信息

@@ -41,7 +41,7 @@ pub struct Config {
     )]
     pub interval: u64,
 
-    /// Data directory for all ScreenTime files (logs, screenshots, etc.)
+    /// Data directory for all OpenRecall files (logs, screenshots, etc.)
     #[clap(
         long,
         env = "SCREENTIME_DATA_DIR",
@@ -144,7 +144,7 @@ pub struct Config {
     )]
     pub control_port: u16,
 
-    /// OpenClaw agent webhook full URL (e.g. http://127.0.0.1:18789/hooks/agent). When set with openclaw-token, ScreenTime will POST summaries to this URL for the agent to summarize.
+    /// OpenClaw agent webhook full URL (e.g. http://127.0.0.1:18789/hooks/agent). When set with openclaw-token, OpenRecall will POST summaries to this URL for the agent to summarize.
     #[clap(long, env = "OPENCLAW_URL", help = "OpenClaw agent 完整 URL（如 .../hooks/agent），与 openclaw-token 同时设置时启用上报")]
     pub openclaw_url: Option<String>,
 
@@ -183,7 +183,7 @@ impl Config {
         #[cfg(target_os = "macos")]
         {
             let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home).join("Library/Application Support/ScreenTime")
+            PathBuf::from(home).join("Library/Application Support/OpenRecall")
         }
         #[cfg(target_os = "linux")]
         {
@@ -193,7 +193,7 @@ impl Config {
         #[cfg(target_os = "windows")]
         {
             let appdata = env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(appdata).join("ScreenTime")
+            PathBuf::from(appdata).join("OpenRecall")
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
