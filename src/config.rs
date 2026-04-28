@@ -92,6 +92,41 @@ pub struct Config {
     )]
     pub installed_apps_include_user_dir: bool,
 
+    /// Enable keyboard/mouse input context collection
+    #[clap(
+        long,
+        env = "INPUT_CONTEXT_ENABLED",
+        help = "启用键盘/鼠标输入上下文采集"
+    )]
+    pub input_context_enabled: bool,
+
+    /// Input context window in seconds
+    #[clap(
+        long,
+        default_value = "60",
+        env = "INPUT_CONTEXT_WINDOW_SECONDS",
+        help = "输入上下文统计窗口（秒）"
+    )]
+    pub input_context_window_seconds: u64,
+
+    /// Max keystrokes included in context
+    #[clap(
+        long,
+        default_value = "120",
+        env = "INPUT_CONTEXT_MAX_KEYSTROKES",
+        help = "上下文中包含的最大按键数量"
+    )]
+    pub input_context_max_keystrokes: usize,
+
+    /// Include raw key names in context
+    #[clap(
+        long,
+        env = "INPUT_CONTEXT_INCLUDE_RAW_KEYS",
+        default_value = "true",
+        help = "是否在上下文中包含原始按键键名"
+    )]
+    pub input_context_include_raw_keys: bool,
+
     /// Path to save service state
     #[clap(
         long,
@@ -415,6 +450,10 @@ impl Config {
         self.installed_apps_refresh_minutes.hash(&mut hasher);
         self.installed_apps_max_items.hash(&mut hasher);
         self.installed_apps_include_user_dir.hash(&mut hasher);
+        self.input_context_enabled.hash(&mut hasher);
+        self.input_context_window_seconds.hash(&mut hasher);
+        self.input_context_max_keystrokes.hash(&mut hasher);
+        self.input_context_include_raw_keys.hash(&mut hasher);
         self.image_target_width.hash(&mut hasher);
         self.image_grayscale.hash(&mut hasher);
         self.no_image_grayscale.hash(&mut hasher);

@@ -241,6 +241,7 @@ fn convert_models_to_context(ctx: &SystemContext) -> context::SystemContext {
             }
         }),
         installed_apps: Vec::new(),
+        input_activity: None,
 
     }
 }

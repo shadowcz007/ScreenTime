@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::input_tracker;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use std::path::PathBuf;
@@ -63,6 +64,7 @@ pub struct SystemContext {
     pub processes_top: Vec<ProcessInfo>,
     pub active_window: Option<ActiveWindowInfo>,
     pub installed_apps: Vec<String>,
+    pub input_activity: Option<input_tracker::InputActivity>,
 }
 
 #[derive(Default)]
@@ -106,6 +108,16 @@ pub async fn collect_system_context(config: &Config) -> SystemContext {
 
     let active_window = get_enhanced_active_window_info().await;
     let installed_apps = collect_installed_apps(config);
+    let input_activity = if config.input_context_enabled {
+        input_tracker::ensure_started();
+        Some(input_tracker::snapshot(
+            config.input_context_window_seconds,
+            config.input_context_max_keystrokes,
+            config.input_context_include_raw_keys,
+        ))
+    } else {
+        None
+    };
 
     SystemContext {
         username,
@@ -115,6 +127,7 @@ pub async fn collect_system_context(config: &Config) -> SystemContext {
         processes_top: procs,
         active_window,
         installed_apps,
+        input_activity,
     }
 }
 
@@ -470,6 +483,23 @@ pub fn format_context_as_text(ctx: &SystemContext) -> String {
         let shown = ctx.installed_apps.iter().take(80).cloned().collect::<Vec<_>>();
         s.push_str(&format!("  - {}\n", shown.join(", ")));
         s.push_str("软件识别规则：优先匹配此清单；若无明确证据请输出“未知软件”。\n");
+    }
+
+    if let Some(input) = &ctx.input_activity {
+        s.push_str("最近输入活动:\n");
+        s.push_str(&format!(
+            "  - 键盘事件: {}\n  - 鼠标点击: {}\n  - 鼠标移动: {}\n",
+            input.keyboard_events, input.mouse_clicks, input.mouse_moves
+        ));
+        if let Some(secs) = input.last_input_secs_ago {
+            s.push_str(&format!("  - 最近输入距今: {} 秒\n", secs));
+        }
+        if !input.inferred_text.is_empty() {
+            s.push_str(&format!("  - 推断输入文本: {}\n", input.inferred_text));
+        }
+        if !input.recent_keys.is_empty() {
+            s.push_str(&format!("  - 最近按键: {}\n", input.recent_keys.join(", ")));
+        }
     }
 
     s

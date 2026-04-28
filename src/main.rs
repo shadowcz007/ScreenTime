@@ -13,6 +13,7 @@ mod standalone_service; // 独立截屏服务
 mod window_tracker; // 窗口追踪模块
 mod openclaw; // OpenClaw webhook 上报
 mod clipboard; // 剪贴板监听
+mod input_tracker; // 输入追踪
 
 use std::error::Error;
 
@@ -66,6 +67,10 @@ mod tests {
             installed_apps_refresh_minutes: 30,
             installed_apps_max_items: 300,
             installed_apps_include_user_dir: true,
+            input_context_enabled: false,
+            input_context_window_seconds: 60,
+            input_context_max_keystrokes: 120,
+            input_context_include_raw_keys: true,
             state_path: None,
             image_target_width: 1440,
             image_grayscale: true,

@@ -1,6 +1,6 @@
 # OpenRecall
 
-一个功能强大的屏幕时间监控工具，使用 Rust 编写，集成了 AI 图像分析和 MCP (Model Context Protocol) 服务功能。它可以定期截取屏幕截图，使用 SiliconFlow 提供的视觉模型分析用户活动，并提供丰富的系统上下文信息。
+一个功能强大的屏幕时间监控工具，使用 Rust 编写，集成了 AI 图像分析和 MCP (Model Context Protocol) 服务功能。它可以定期截取屏幕截图，调用可配置的本地/远程多模态模型分析用户活动，并提供丰富的系统上下文信息。
 
 ## 📋 更新日志
 
@@ -55,7 +55,7 @@
 - **📝 完整活动日志**: 记录分析结果、系统状态、截图路径、模型信息和token使用
 - **⚙️ 简化配置**: 约定大于配置，只需设置数据根目录即可
 - **🌐 Web 服务**: 内置 SSE (Server-Sent Events) 服务器，支持实时数据推送
-- **🔧 自定义API**: 支持配置自定义API端点，包括SiliconFlow和Ollama等本地模型
+- **🔧 自定义API**: 支持配置自定义API端点，包括本地模型（Ollama 等）和远程服务
 - **📤 OpenClaw 上报**: 可选将过去 N 分钟的 OpenRecall 摘要发送到 OpenClaw Gateway，便于与主会话联动
 - **🧪 测试功能**: 支持使用新prompt重新分析现有截图，便于优化分析效果
 
@@ -333,6 +333,10 @@ OpenRecall 需要以下系统权限才能正常工作：
 | `--installed-apps-refresh-minutes <MINUTES>` | `INSTALLED_APPS_REFRESH_MINUTES` | `30` | 已安装软件清单缓存刷新间隔（分钟） |
 | `--installed-apps-max-items <N>` | `INSTALLED_APPS_MAX_ITEMS` | `300` | 注入上下文的已安装软件上限 |
 | `--installed-apps-include-user-dir` | `INSTALLED_APPS_INCLUDE_USER_DIR` | `true` | 是否扫描 `~/Applications` |
+| `--input-context-enabled` | `INPUT_CONTEXT_ENABLED` | `false` | 启用键盘/鼠标输入上下文采集 |
+| `--input-context-window-seconds <SECONDS>` | `INPUT_CONTEXT_WINDOW_SECONDS` | `60` | 输入上下文统计窗口（秒） |
+| `--input-context-max-keystrokes <N>` | `INPUT_CONTEXT_MAX_KEYSTROKES` | `120` | 上下文中包含的最大按键数量 |
+| `--input-context-include-raw-keys` | `INPUT_CONTEXT_INCLUDE_RAW_KEYS` | `true` | 是否包含原始按键键名 |
 | `--data-dir <DATA_DIR>` | `SCREENTIME_DATA_DIR` | 系统默认目录* | 数据存储根目录 |
 | `--image-target-width <WIDTH>` | `IMAGE_TARGET_WIDTH` | `1440` | 图片处理的目标宽度，设置为0保持原图尺寸 |
 | `--image-grayscale` | `IMAGE_GRAYSCALE` | `true` | 是否将图片转换为灰度图 |
@@ -380,6 +384,10 @@ export INSTALLED_APPS_ENABLED=true
 export INSTALLED_APPS_REFRESH_MINUTES=30
 export INSTALLED_APPS_MAX_ITEMS=300
 export INSTALLED_APPS_INCLUDE_USER_DIR=true
+export INPUT_CONTEXT_ENABLED=false
+export INPUT_CONTEXT_WINDOW_SECONDS=60
+export INPUT_CONTEXT_MAX_KEYSTROKES=120
+export INPUT_CONTEXT_INCLUDE_RAW_KEYS=true
 export SCREENTIME_DATA_DIR=/path/to/your/data
 export IMAGE_TARGET_WIDTH=1440
 export IMAGE_GRAYSCALE=true
@@ -408,7 +416,7 @@ export CLIPBOARD_MAX_BYTES=200000
 
 OpenRecall 支持配置自定义的 API 端点，适用于以下场景：
 
-- **私有部署**: 如果您有自己的 SiliconFlow 服务实例
+- **私有部署**: 如果您有自己的模型网关或推理服务实例
 - **企业环境**: 公司内部的API服务
 - **测试环境**: 开发或测试用的API端点
 - **本地模型**: 使用 Ollama 等本地大语言模型服务
@@ -471,7 +479,7 @@ OpenRecall/
 │   ├── main.rs              # 程序入口点
 │   ├── config.rs            # 配置解析（简化版）
 │   ├── screenshot.rs        # 屏幕截图功能
-│   ├── siliconflow.rs       # SiliconFlow API 调用（包含token统计）
+│   ├── siliconflow.rs       # 模型 API 调用（包含 token 统计）
 │   ├── logger.rs            # 日志记录功能（按日期分类）
 │   ├── models.rs            # 数据模型定义（扩展版）
 │   ├── capture.rs           # 截屏循环控制
@@ -588,13 +596,13 @@ logs/
 - `limit`: 限制返回条数（可选）
 - `detailed`: 是否包含详细信息（可选）
 
-### take_screenshot
-手动截取屏幕截图
+### 说明
+当前 MCP 工具以 `monitor`、`read_logs` 以及剪贴板相关工具为主（`clipboard_status` / `clipboard_list` / `clipboard_save` / `clipboard_auto_save`）。
 
 ## ⚠️ 注意事项
 
 1. **权限要求**: 请确保你的系统允许屏幕录制权限
-2. **API 费用**: SiliconFlow API 调用可能会产生费用，请根据你的使用情况进行监控
+2. **API 费用**: 当你使用计费型远程模型服务时，API 调用可能产生费用，请关注 token 消耗
 3. **隐私保护**: 截图和分析结果会保存在本地，请注意保护个人隐私
 4. **系统兼容性**: 支持 macOS 和 Windows 系统，Linux 系统的支持正在开发中
 5. **网络连接**: 需要稳定的网络连接以调用 AI 分析服务
@@ -619,6 +627,15 @@ logs/
 - **误识别未安装软件**：开启 `INSTALLED_APPS_ENABLED=true`，并优化 `SCREEN_ANALYSIS_PROMPT`（要求无证据时输出“未知软件”）。
 - **关键词被误跳过**：降低 `CLIPBOARD_AI_MIN_CHARS`（如 6），并强化 `CLIPBOARD_AI_FILTER_PROMPT` 对关键词组合的保留规则。
 - **AI 过滤日志不清晰**：检查 `skip_by_ai` 行是否含 `reason/category`，若无通常是旧进程未重启。
+- **输入状态未生效**：启用 `INPUT_CONTEXT_ENABLED=true` 后，确保系统已授予输入监控相关权限。
+
+### 3 分钟速查表
+
+- **分析没跑**：先用 `monitor status` 确认服务在 `Running`，再看终端有无 `尝试分析截图`。
+- **软件识别不准**：检查上下文是否出现“已安装软件清单(部分)”，无证据时应输出“未知软件”。
+- **剪贴板没落盘**：先看 `clipboards/events.log` 里的 `clipboard_ai` 与 `clipboard_save`。
+- **配置改了没生效**：确认改的是项目根目录 `.env`，并观察热重载提示。
+- **阅读日志优先级**：先看 `logs_md/YYYY-MM-DD.md`，再看 `logs/YYYY-MM-DD.json` 做精确核对。
 
 ## 🤝 贡献
 
