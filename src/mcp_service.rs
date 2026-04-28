@@ -36,6 +36,22 @@ pub struct ReadLogsArgs {
     #[serde(skip_serializing_if = "Option::is_none")] pub detailed: Option<bool>,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ClipboardListArgs {
+    #[serde(skip_serializing_if = "Option::is_none")] pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ClipboardSaveArgs {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")] pub target_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ClipboardAutoSaveArgs {
+    pub enabled: bool,
+}
+
 #[tool_router]
 impl OpenRecallService {
     pub fn new(config: Config) -> Self {
@@ -78,6 +94,16 @@ impl OpenRecallService {
                     if let Some(last_capture) = state.last_capture_time {
                         message = format!("{}\n最后截屏: {}", message, last_capture.format("%Y-%m-%d %H:%M:%S"));
                     }
+                }
+
+                if let Some(clipboard) = response.clipboard_status {
+                    message = format!(
+                        "{}\n剪贴板监听: {}\n剪贴板自动保存: {}\n剪贴板记录数: {}",
+                        message,
+                        if clipboard.enabled { "enabled" } else { "disabled" },
+                        if clipboard.auto_save { "enabled" } else { "disabled" },
+                        clipboard.total_items
+                    );
                 }
                 
                 Ok(CallToolResult::success(vec![Content::text(message)]))
@@ -123,6 +149,98 @@ impl OpenRecallService {
         }
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
+
+    #[tool(description = "查询剪贴板监听状态")]
+    async fn clipboard_status(&self) -> Result<CallToolResult, McpError> {
+        match self
+            .service_controller
+            .send_command(ServiceCommand::ClipboardStatus)
+            .await
+        {
+            Ok(response) => {
+                if let Some(status) = response.clipboard_status {
+                    let message = format!(
+                        "enabled: {}\nauto_save: {}\ntotal_items: {}\nlast_capture: {}",
+                        status.enabled,
+                        status.auto_save,
+                        status.total_items,
+                        status
+                            .last_capture_time
+                            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                            .unwrap_or_else(|| "-".to_string())
+                    );
+                    Ok(CallToolResult::success(vec![Content::text(message)]))
+                } else {
+                    Ok(CallToolResult::success(vec![Content::text(
+                        "未获取到剪贴板状态".to_string(),
+                    )]))
+                }
+            }
+            Err(e) => Ok(CallToolResult::success(vec![Content::text(format!(
+                "服务通信错误: {}",
+                e
+            ))])),
+        }
+    }
+
+    #[tool(description = "列出最近剪贴板记录，limit 默认 20")]
+    async fn clipboard_list(
+        &self,
+        Parameters(args): Parameters<ClipboardListArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        match self
+            .service_controller
+            .send_command(ServiceCommand::ClipboardList { limit: args.limit })
+            .await
+        {
+            Ok(response) => Ok(CallToolResult::success(vec![Content::text(response.message)])),
+            Err(e) => Ok(CallToolResult::success(vec![Content::text(format!(
+                "服务通信错误: {}",
+                e
+            ))])),
+        }
+    }
+
+    #[tool(description = "将指定 id 的剪贴板内容保存为 Markdown")]
+    async fn clipboard_save(
+        &self,
+        Parameters(args): Parameters<ClipboardSaveArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        match self
+            .service_controller
+            .send_command(ServiceCommand::ClipboardSave {
+                id: args.id,
+                target_dir: args.target_dir,
+            })
+            .await
+        {
+            Ok(response) => Ok(CallToolResult::success(vec![Content::text(response.message)])),
+            Err(e) => Ok(CallToolResult::success(vec![Content::text(format!(
+                "服务通信错误: {}",
+                e
+            ))])),
+        }
+    }
+
+    #[tool(description = "开启/关闭剪贴板自动保存")]
+    async fn clipboard_auto_save(
+        &self,
+        Parameters(args): Parameters<ClipboardAutoSaveArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        match self
+            .service_controller
+            .send_command(ServiceCommand::ClipboardAutoSave {
+                enabled: args.enabled,
+            })
+            .await
+        {
+            Ok(response) => Ok(CallToolResult::success(vec![Content::text(response.message)])),
+            Err(e) => Ok(CallToolResult::success(vec![Content::text(format!(
+                "服务通信错误: {}",
+                e
+            ))])),
+        }
+    }
 }
 
 #[tool_handler]
@@ -132,7 +250,7 @@ impl ServerHandler for OpenRecallService {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation::from_build_env(),
-            instructions: Some("OpenRecall MCP server: tools=monitor, read_logs".to_string()),
+            instructions: Some("OpenRecall MCP server: tools=monitor, read_logs, clipboard_status, clipboard_list, clipboard_save, clipboard_auto_save".to_string()),
         }
     }
 }

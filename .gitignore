@@ -3,3 +3,4 @@
 .DS_Store
 activity_log.json
 test_log.json
+.env

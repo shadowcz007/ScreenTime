@@ -138,7 +138,7 @@
 ## [0.2.0] - 2025-8
 
 ### ✨ 新增功能
-- **自定义API端点支持**: 添加了 `--api-url` 命令行参数和 `SILICONFLOW_API_URL` 环境变量
+- **自定义API端点支持**: 添加了 `--api-url` 命令行参数和 `OPENRECALL_API_URL` 环境变量
 - 支持配置自定义的 SiliconFlow API 端点，适用于私有部署和企业环境
 - 保持向后兼容，默认使用官方API端点
 

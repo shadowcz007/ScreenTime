@@ -12,6 +12,7 @@ mod service_state; // 服务状态管理
 mod standalone_service; // 独立截屏服务
 mod window_tracker; // 窗口追踪模块
 mod openclaw; // OpenClaw webhook 上报
+mod clipboard; // 剪贴板监听
 
 use std::error::Error;
 
@@ -55,11 +56,16 @@ mod tests {
         // 创建一个测试配置，避免解析命令行参数
         let config = config::Config {
             api_key: "test_key".to_string(),
-            api_url: "https://api.siliconflow.cn/v1/chat/completions".to_string(),
-            model: "THUDM/GLM-4.1V-9B-Thinking".to_string(),
+            api_url: "http://127.0.0.1:1234/v1/chat/completions".to_string(),
+            model: "default".to_string(),
             prompt: "测试提示".to_string(),
             interval: 60,
+            start_capture_on_launch: false,
             data_dir: None,
+            installed_apps_enabled: true,
+            installed_apps_refresh_minutes: 30,
+            installed_apps_max_items: 300,
+            installed_apps_include_user_dir: true,
             state_path: None,
             image_target_width: 1440,
             image_grayscale: true,
@@ -70,6 +76,21 @@ mod tests {
             test_log_path: PathBuf::from("test_log.json"),
             socket_path: None,
             control_port: 5830,
+            keep_screenshots: false,
+            api_timeout: 120,
+            openclaw_url: None,
+            openclaw_token: None,
+            openclaw_report_interval_minutes: 30,
+            clipboard_enabled: false,
+            clipboard_interval_ms: 500,
+            clipboard_auto_save: false,
+            clipboard_ai_filter_enabled: false,
+            clipboard_ai_filter_prompt: "test".to_string(),
+            clipboard_ai_min_chars: 20,
+            clipboard_ai_timeout_seconds: 10,
+            clipboard_ai_save_on_error: false,
+            clipboard_target_dir: None,
+            clipboard_max_bytes: 200000,
         };
         
         #[cfg(windows)]
@@ -209,6 +230,11 @@ async fn run_standalone_service(config: config::Config) -> Result<(), Box<dyn Er
     
     println!("📋 配置信息:");
     println!("  - 监控间隔: {} 秒", config.interval);
+    println!(
+        "  - 启动强制截屏: {}",
+        if config.start_capture_on_launch { "是" } else { "否" }
+    );
+    println!("  - API URL: {}", config.api_url);
     println!("  - 使用模型: {}", config.model);
     println!("  - 截图目录: {:?}", config.get_screenshot_dir());
     println!("  - 日志目录: {:?}", config.get_logs_dir());

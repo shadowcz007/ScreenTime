@@ -37,6 +37,7 @@ pub async fn run_capture_loop_with_state(
     config: Config,
     state_manager: Arc<ServiceStateManager>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut config = config;
     println!("🚀 启动带状态管理的截屏循环...");
 
     // 确保截图目录存在
@@ -60,11 +61,24 @@ pub async fn run_capture_loop_with_state(
     println!("开始间隔循环，间隔: {} 秒", config.interval);
 
     // 开始间隔循环
-    let mut interval_timer = interval(Duration::from_secs(config.interval));
+    let mut current_interval_secs = config.interval.max(1);
+    let mut interval_timer = interval(Duration::from_secs(current_interval_secs));
 
     loop {
         // 等待下一个时间点
         interval_timer.tick().await;
+
+        // 运行时自动重载 .env 配置
+        if let Ok(changed) = config.reload_from_dotenv_and_args() {
+            if changed {
+                let new_interval_secs = config.interval.max(1);
+                if new_interval_secs != current_interval_secs {
+                    current_interval_secs = new_interval_secs;
+                    interval_timer = interval(Duration::from_secs(current_interval_secs));
+                    println!("🔄 检测到 .env 变更，截屏间隔已更新为 {} 秒", current_interval_secs);
+                }
+            }
+        }
 
         // 检查服务状态
         if !state_manager.should_capture().await {
@@ -112,7 +126,7 @@ async fn perform_capture(
     let grayscale = config.image_grayscale && !config.no_image_grayscale;
 
     // 获取当前活跃窗口信息，用于智能选择屏幕
-    let ctx_for_screenshot = context::collect_system_context().await;
+    let ctx_for_screenshot = context::collect_system_context(config).await;
 
     // 截屏 - 使用智能截图功能
     screenshot::capture_screenshot_smart(
@@ -131,7 +145,7 @@ async fn perform_capture(
         analyze_screenshot_with_retry(config, screenshot_path_str, &timestamp).await?;
 
     // 创建活动日志
-    let ctx_original = context::collect_system_context().await;
+    let ctx_original = context::collect_system_context(config).await;
     let ctx = convert_context_to_models(&ctx_original);
 
     // 是否保留截图：显式开关或 test_prompt 模式强制保留
@@ -185,7 +199,7 @@ async fn analyze_screenshot_with_retry(
     const RETRY_DELAYS: [u64; 5] = [5, 15, 30, 45, 60]; // 重试延迟：5秒、15秒、30秒
 
     // 获取系统上下文和历史记录
-    let ctx_original = context::collect_system_context().await;
+    let ctx_original = context::collect_system_context(config).await;
     let ctx_text = context::format_context_as_text(&ctx_original);
 
     // 获取历史活动记录（最近5条）

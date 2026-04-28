@@ -5,23 +5,23 @@ use std::env;
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 pub struct Config {
-    /// SiliconFlow API key (or set SILICONFLOW_API_KEY environment variable)
-    #[clap(short, long, env = "SILICONFLOW_API_KEY")]
+    /// API key (or set OPENRECALL_API_KEY environment variable)
+    #[clap(short, long, default_value = "default", env = "OPENRECALL_API_KEY")]
     pub api_key: String,
 
-    /// SiliconFlow API URL (or set SILICONFLOW_API_URL environment variable)
+    /// API URL (or set OPENRECALL_API_URL environment variable)
     #[clap(
         long,
-        default_value = "https://api.siliconflow.cn/v1/chat/completions",
-        env = "SILICONFLOW_API_URL"
+        default_value = "http://127.0.0.1:1234/v1/chat/completions",
+        env = "OPENRECALL_API_URL"
     )]
     pub api_url: String,
 
     /// The model to use for analysis
     #[clap(
         short, long,
-        default_value = "THUDM/GLM-4.1V-9B-Thinking",
-        env = "SILICONFLOW_MODEL"
+        default_value = "default",
+        env = "OPENRECALL_MODEL"
     )]
     pub model: String,
 
@@ -41,6 +41,14 @@ pub struct Config {
     )]
     pub interval: u64,
 
+    /// Force start capture loop on launch
+    #[clap(
+        long,
+        env = "START_CAPTURE_ON_LAUNCH",
+        help = "启动后强制开启截屏服务（忽略上次停止状态）"
+    )]
+    pub start_capture_on_launch: bool,
+
     /// Data directory for all OpenRecall files (logs, screenshots, etc.)
     #[clap(
         long,
@@ -48,6 +56,41 @@ pub struct Config {
         help = "数据存储根目录，包含日志、截图等所有文件"
     )]
     pub data_dir: Option<PathBuf>,
+
+    /// Include installed app list in context (macOS)
+    #[clap(
+        long,
+        env = "INSTALLED_APPS_ENABLED",
+        help = "在上下文中注入已安装软件清单（macOS）"
+    )]
+    pub installed_apps_enabled: bool,
+
+    /// Refresh interval for installed app cache in minutes
+    #[clap(
+        long,
+        default_value = "30",
+        env = "INSTALLED_APPS_REFRESH_MINUTES",
+        help = "已安装软件清单缓存刷新间隔（分钟）"
+    )]
+    pub installed_apps_refresh_minutes: u64,
+
+    /// Max items of installed app list included in context
+    #[clap(
+        long,
+        default_value = "300",
+        env = "INSTALLED_APPS_MAX_ITEMS",
+        help = "注入上下文的已安装软件数量上限"
+    )]
+    pub installed_apps_max_items: usize,
+
+    /// Include ~/Applications when collecting installed apps
+    #[clap(
+        long,
+        env = "INSTALLED_APPS_INCLUDE_USER_DIR",
+        default_value = "true",
+        help = "是否扫描 ~/Applications（macOS）"
+    )]
+    pub installed_apps_include_user_dir: bool,
 
     /// Path to save service state
     #[clap(
@@ -160,11 +203,99 @@ pub struct Config {
         help = "向 OpenClaw 上报的间隔（分钟）"
     )]
     pub openclaw_report_interval_minutes: u64,
+
+    /// Enable clipboard watcher
+    #[clap(long, env = "CLIPBOARD_ENABLED", help = "启用剪贴板监听")]
+    pub clipboard_enabled: bool,
+
+    /// Clipboard polling interval in milliseconds
+    #[clap(
+        long,
+        default_value = "500",
+        env = "CLIPBOARD_INTERVAL_MS",
+        help = "剪贴板监听轮询间隔（毫秒）"
+    )]
+    pub clipboard_interval_ms: u64,
+
+    /// Auto save new clipboard items to markdown
+    #[clap(long, env = "CLIPBOARD_AUTO_SAVE", help = "自动保存新剪贴板内容为 Markdown")]
+    pub clipboard_auto_save: bool,
+
+    /// Enable AI filter for clipboard save decisions
+    #[clap(
+        long,
+        env = "CLIPBOARD_AI_FILTER_ENABLED",
+        help = "启用剪贴板 AI 过滤，仅在判定 save=true 时保存"
+    )]
+    pub clipboard_ai_filter_enabled: bool,
+
+    /// Prompt for clipboard AI filter
+    #[clap(
+        long,
+        env = "CLIPBOARD_AI_FILTER_PROMPT",
+        default_value = "你是剪贴板内容过滤器。任务：判断该内容是否应保存，用于后续 web-search 研究。仅当内容包含可研究 URL、研究主题或检索关键词时 save=true。如果是验证码、密码、token、私钥、无意义噪音则 save=false。只输出一行JSON：{\"save\":true|false,\"reason\":\"简短原因\",\"category\":\"url|topic|keywords|other\"}。"
+    )]
+    pub clipboard_ai_filter_prompt: String,
+
+    /// Min chars before calling clipboard AI filter
+    #[clap(
+        long,
+        env = "CLIPBOARD_AI_MIN_CHARS",
+        default_value = "20",
+        help = "触发剪贴板 AI 判定的最小字符数"
+    )]
+    pub clipboard_ai_min_chars: usize,
+
+    /// Timeout for clipboard AI filter request
+    #[clap(
+        long,
+        env = "CLIPBOARD_AI_TIMEOUT_SECONDS",
+        default_value = "10",
+        help = "剪贴板 AI 判定请求超时时间（秒）"
+    )]
+    pub clipboard_ai_timeout_seconds: u64,
+
+    /// Save clipboard content when AI filter errors
+    #[clap(
+        long,
+        env = "CLIPBOARD_AI_SAVE_ON_ERROR",
+        help = "AI 判定失败时是否仍保存（默认 false）"
+    )]
+    pub clipboard_ai_save_on_error: bool,
+
+    /// Clipboard export directory
+    #[clap(
+        long,
+        env = "CLIPBOARD_TARGET_DIR",
+        help = "剪贴板 Markdown 导出目录，默认使用数据目录下 clipboards/exports"
+    )]
+    pub clipboard_target_dir: Option<PathBuf>,
+
+    /// Max bytes for one clipboard content
+    #[clap(
+        long,
+        default_value = "200000",
+        env = "CLIPBOARD_MAX_BYTES",
+        help = "单条剪贴板内容最大字节数，超出将忽略"
+    )]
+    pub clipboard_max_bytes: usize,
 }
 
 impl Config {
     pub fn from_args() -> Self {
+        // 工程化默认行为：自动加载当前目录 .env（若存在）
+        let _ = dotenvy::dotenv();
         Self::parse()
+    }
+
+    /// 运行时热重载：重新读取 .env 并按当前命令行参数重新解析配置
+    /// 返回 true 表示配置发生变化
+    pub fn reload_from_dotenv_and_args(&mut self) -> Result<bool, clap::Error> {
+        let _ = dotenvy::from_filename_override(".env");
+        let new_config = Self::try_parse_from(std::env::args_os())?;
+        let changed = self.get_config_hash() != new_config.get_config_hash();
+        *self = new_config;
+        Ok(changed)
     }
 
     /// 获取数据存储根目录
@@ -209,6 +340,29 @@ impl Config {
     /// 获取按日期分类的日志目录
     pub fn get_logs_dir(&self) -> PathBuf {
         self.get_data_dir().join("logs")
+    }
+
+    /// 获取剪贴板数据目录
+    pub fn get_clipboard_dir(&self) -> PathBuf {
+        self.get_data_dir().join("clipboards")
+    }
+
+    /// 获取剪贴板存储文件路径
+    pub fn get_clipboard_store_path(&self) -> PathBuf {
+        self.get_clipboard_dir().join("history.json")
+    }
+
+    /// 获取剪贴板索引文件路径
+    pub fn get_clipboard_index_path(&self) -> PathBuf {
+        self.get_clipboard_dir().join("index.json")
+    }
+
+    /// 获取剪贴板导出目录
+    pub fn get_clipboard_export_dir(&self) -> PathBuf {
+        if let Some(path) = &self.clipboard_target_dir {
+            return path.clone();
+        }
+        self.get_clipboard_dir().join("exports")
     }
 
     /// 获取指定日期的日志文件路径
@@ -257,11 +411,24 @@ impl Config {
         self.model.hash(&mut hasher);
         self.prompt.hash(&mut hasher);
         self.interval.hash(&mut hasher);
+        self.installed_apps_enabled.hash(&mut hasher);
+        self.installed_apps_refresh_minutes.hash(&mut hasher);
+        self.installed_apps_max_items.hash(&mut hasher);
+        self.installed_apps_include_user_dir.hash(&mut hasher);
         self.image_target_width.hash(&mut hasher);
         self.image_grayscale.hash(&mut hasher);
         self.no_image_grayscale.hash(&mut hasher);
         self.keep_screenshots.hash(&mut hasher);
         self.api_timeout.hash(&mut hasher);
+        self.clipboard_enabled.hash(&mut hasher);
+        self.clipboard_interval_ms.hash(&mut hasher);
+        self.clipboard_auto_save.hash(&mut hasher);
+        self.clipboard_ai_filter_enabled.hash(&mut hasher);
+        self.clipboard_ai_filter_prompt.hash(&mut hasher);
+        self.clipboard_ai_min_chars.hash(&mut hasher);
+        self.clipboard_ai_timeout_seconds.hash(&mut hasher);
+        self.clipboard_ai_save_on_error.hash(&mut hasher);
+        self.clipboard_max_bytes.hash(&mut hasher);
         hasher.finish().to_string()
     }
 }

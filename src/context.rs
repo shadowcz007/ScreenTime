@@ -1,5 +1,9 @@
+use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
+use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::{Duration as StdDuration, Instant};
 
 use tokio::time::{sleep, Duration};
 
@@ -58,9 +62,20 @@ pub struct SystemContext {
     pub os_version: Option<String>,
     pub processes_top: Vec<ProcessInfo>,
     pub active_window: Option<ActiveWindowInfo>,
+    pub installed_apps: Vec<String>,
 }
 
-pub async fn collect_system_context() -> SystemContext {
+#[derive(Default)]
+struct InstalledAppsCache {
+    apps: Vec<String>,
+    fetched_at: Option<Instant>,
+}
+
+lazy_static::lazy_static! {
+    static ref INSTALLED_APPS_CACHE: Mutex<InstalledAppsCache> = Mutex::new(InstalledAppsCache::default());
+}
+
+pub async fn collect_system_context(config: &Config) -> SystemContext {
     let username = whoami::username();
 
     let mut sys = System::new_all();
@@ -90,6 +105,7 @@ pub async fn collect_system_context() -> SystemContext {
 
 
     let active_window = get_enhanced_active_window_info().await;
+    let installed_apps = collect_installed_apps(config);
 
     SystemContext {
         username,
@@ -98,7 +114,79 @@ pub async fn collect_system_context() -> SystemContext {
         os_version,
         processes_top: procs,
         active_window,
+        installed_apps,
     }
+}
+
+fn collect_installed_apps(config: &Config) -> Vec<String> {
+    if !config.installed_apps_enabled {
+        return Vec::new();
+    }
+
+    let refresh_interval = StdDuration::from_secs(config.installed_apps_refresh_minutes.max(1) * 60);
+    {
+        if let Ok(cache) = INSTALLED_APPS_CACHE.lock() {
+            if let Some(fetched_at) = cache.fetched_at {
+                if fetched_at.elapsed() < refresh_interval {
+                    return cache.apps.clone();
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let apps = collect_installed_apps_macos(config);
+        if let Ok(mut cache) = INSTALLED_APPS_CACHE.lock() {
+            cache.apps = apps.clone();
+            cache.fetched_at = Some(Instant::now());
+        }
+        return apps;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Vec::new()
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn collect_installed_apps_macos(config: &Config) -> Vec<String> {
+    let mut roots = vec![
+        PathBuf::from("/Applications"),
+        PathBuf::from("/System/Applications"),
+    ];
+
+    if config.installed_apps_include_user_dir {
+        if let Ok(home) = std::env::var("HOME") {
+            roots.push(PathBuf::from(home).join("Applications"));
+        }
+    }
+
+    let mut apps: Vec<String> = Vec::new();
+    for root in roots {
+        if let Ok(entries) = std::fs::read_dir(root) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("app") {
+                    continue;
+                }
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    let name = stem.trim();
+                    if !name.is_empty() {
+                        apps.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    apps.sort();
+    apps.dedup();
+    if apps.len() > config.installed_apps_max_items {
+        apps.truncate(config.installed_apps_max_items);
+    }
+    apps
 }
 
 /// 获取增强的活跃窗口信息（包含追踪数据）
@@ -375,6 +463,13 @@ pub fn format_context_as_text(ctx: &SystemContext) -> String {
                 p.name, p.cpu_percent
             ));
         }
+    }
+
+    if !ctx.installed_apps.is_empty() {
+        s.push_str("已安装软件清单(部分):\n");
+        let shown = ctx.installed_apps.iter().take(80).cloned().collect::<Vec<_>>();
+        s.push_str(&format!("  - {}\n", shown.join(", ")));
+        s.push_str("软件识别规则：优先匹配此清单；若无明确证据请输出“未知软件”。\n");
     }
 
     s

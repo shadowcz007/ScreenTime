@@ -240,6 +240,7 @@ fn convert_models_to_context(ctx: &SystemContext) -> context::SystemContext {
                 recent_switches: None,
             }
         }),
+        installed_apps: Vec::new(),
 
     }
 }

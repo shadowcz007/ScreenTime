@@ -1,5 +1,6 @@
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ActivityLog {
@@ -74,6 +75,10 @@ pub enum ServiceCommand {
     Start,
     Stop,
     Status,
+    ClipboardStatus,
+    ClipboardList { limit: Option<usize> },
+    ClipboardSave { id: String, target_dir: Option<String> },
+    ClipboardAutoSave { enabled: bool },
 }
 
 // 新增：服务响应
@@ -82,4 +87,35 @@ pub struct ServiceResponse {
     pub success: bool,
     pub message: String,
     pub state: Option<CaptureServiceState>,
+    pub clipboard_status: Option<ClipboardStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClipboardItem {
+    pub id: String,
+    pub timestamp: DateTime<Local>,
+    pub content: String,
+    pub content_type: String,
+    pub hash: String,
+    pub seen_count: u64,
+    pub last_seen: DateTime<Local>,
+    pub saved_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ClipboardStoreState {
+    pub items: Vec<ClipboardItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ClipboardIndex {
+    pub hash_to_id: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ClipboardStatus {
+    pub enabled: bool,
+    pub auto_save: bool,
+    pub total_items: usize,
+    pub last_capture_time: Option<DateTime<Local>>,
 }

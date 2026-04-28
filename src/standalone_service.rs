@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::openclaw;
+use crate::clipboard::{self, ClipboardManager};
 use crate::service_state::ServiceStateManager;
 use crate::capture;
 use crate::models::{CaptureServiceStatus, ServiceCommand, ServiceResponse};
@@ -20,12 +21,15 @@ pub struct StandaloneService {
     state_manager: Arc<ServiceStateManager>,
     shutdown_tx: broadcast::Sender<()>,
     capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    clipboard_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    clipboard_manager: Arc<Mutex<ClipboardManager>>,
 }
 
 impl StandaloneService {
     /// 创建新的独立服务
     pub async fn new(config: Config) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let state_manager = Arc::new(ServiceStateManager::new(&config).await?);
+        let clipboard_manager = Arc::new(Mutex::new(ClipboardManager::new(config.clone()).await?));
         let (shutdown_tx, _) = broadcast::channel(16);
         
         Ok(Self {
@@ -33,6 +37,8 @@ impl StandaloneService {
             state_manager,
             shutdown_tx,
             capture_handle: Arc::new(Mutex::new(None)),
+            clipboard_handle: Arc::new(Mutex::new(None)),
+            clipboard_manager,
         })
     }
     
@@ -50,6 +56,28 @@ impl StandaloneService {
             CaptureServiceStatus::Stopped => {
                 println!("⏹️ 服务处于停止状态");
             }
+        }
+
+        if self.config.start_capture_on_launch
+            && matches!(current_state.status, CaptureServiceStatus::Stopped)
+        {
+            println!("⚡ 检测到 --start-capture-on-launch，强制开启截屏服务...");
+            match self.state_manager.start_service().await {
+                Ok(true) => {
+                    self.start_capture_loop().await?;
+                    println!("✅ 启动时已强制开启截屏服务");
+                }
+                Ok(false) => {
+                    println!("ℹ️ 截屏服务已在运行状态");
+                }
+                Err(e) => {
+                    eprintln!("⚠️ 启动时强制开启截屏失败: {}", e);
+                }
+            }
+        }
+
+        if self.config.clipboard_enabled {
+            self.start_clipboard_loop().await?;
         }
         
         // 启动控制socket服务器
@@ -72,6 +100,8 @@ impl StandaloneService {
             let config = self.config.clone();
             let shutdown_tx = self.shutdown_tx.clone();
             let capture_handle = self.capture_handle.clone();
+            let clipboard_handle = self.clipboard_handle.clone();
+            let clipboard_manager = self.clipboard_manager.clone();
             
             tokio::spawn(async move {
                 Self::handle_unix_socket_connections(
@@ -79,7 +109,9 @@ impl StandaloneService {
                     state_manager, 
                     config, 
                     shutdown_tx,
-                    capture_handle
+                    capture_handle,
+                    clipboard_handle,
+                    clipboard_manager,
                 ).await;
             });
         }
@@ -94,6 +126,8 @@ impl StandaloneService {
             let config = self.config.clone();
             let shutdown_tx = self.shutdown_tx.clone();
             let capture_handle = self.capture_handle.clone();
+            let clipboard_handle = self.clipboard_handle.clone();
+            let clipboard_manager = self.clipboard_manager.clone();
             
             tokio::spawn(async move {
                 Self::handle_tcp_socket_connections(
@@ -101,7 +135,9 @@ impl StandaloneService {
                     state_manager, 
                     config, 
                     shutdown_tx,
-                    capture_handle
+                    capture_handle,
+                    clipboard_handle,
+                    clipboard_manager,
                 ).await;
             });
         }
@@ -137,7 +173,9 @@ impl StandaloneService {
         state_manager: Arc<ServiceStateManager>,
         config: Config,
         _shutdown_tx: broadcast::Sender<()>,
-        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_manager: Arc<Mutex<ClipboardManager>>,
     ) {
         loop {
             match listener.accept().await {
@@ -145,9 +183,11 @@ impl StandaloneService {
                     let state_manager = state_manager.clone();
                     let config = config.clone();
                     let capture_handle = capture_handle.clone();
+                    let clipboard_handle = clipboard_handle.clone();
+                    let clipboard_manager = clipboard_manager.clone();
                     
                     tokio::spawn(async move {
-                        Self::handle_unix_stream(stream, state_manager, config, capture_handle).await;
+                        Self::handle_unix_stream(stream, state_manager, config, capture_handle, clipboard_handle, clipboard_manager).await;
                     });
                 }
                 Err(e) => {
@@ -165,7 +205,9 @@ impl StandaloneService {
         state_manager: Arc<ServiceStateManager>,
         config: Config,
         _shutdown_tx: broadcast::Sender<()>,
-        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_manager: Arc<Mutex<ClipboardManager>>,
     ) {
         loop {
             match listener.accept().await {
@@ -174,9 +216,11 @@ impl StandaloneService {
                     let state_manager = state_manager.clone();
                     let config = config.clone();
                     let capture_handle = capture_handle.clone();
+                    let clipboard_handle = clipboard_handle.clone();
+                    let clipboard_manager = clipboard_manager.clone();
                     
                     tokio::spawn(async move {
-                        Self::handle_tcp_stream(stream, state_manager, config, capture_handle).await;
+                        Self::handle_tcp_stream(stream, state_manager, config, capture_handle, clipboard_handle, clipboard_manager).await;
                     });
                 }
                 Err(e) => {
@@ -193,7 +237,9 @@ impl StandaloneService {
         mut stream: UnixStream,
         state_manager: Arc<ServiceStateManager>,
         config: Config,
-        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_manager: Arc<Mutex<ClipboardManager>>,
     ) {
         let mut buffer = Vec::new();
         let mut temp_buffer = [0; 1024];
@@ -206,7 +252,7 @@ impl StandaloneService {
                     
                     // 尝试解析JSON命令
                     if let Ok(command) = serde_json::from_slice::<ServiceCommand>(&buffer) {
-                        let response = Self::handle_command(command, &state_manager, &config, &capture_handle).await;
+                        let response = Self::handle_command(command, &state_manager, &config, &capture_handle, &clipboard_handle, &clipboard_manager).await;
                         
                         if let Ok(response_json) = serde_json::to_string(&response) {
                             if let Err(e) = stream.write_all(response_json.as_bytes()).await {
@@ -231,7 +277,9 @@ impl StandaloneService {
         mut stream: TcpStream,
         state_manager: Arc<ServiceStateManager>,
         config: Config,
-        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+        capture_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_manager: Arc<Mutex<ClipboardManager>>,
     ) {
         let mut buffer = Vec::new();
         let mut temp_buffer = [0; 1024];
@@ -244,7 +292,7 @@ impl StandaloneService {
                     
                     // 尝试解析JSON命令
                     if let Ok(command) = serde_json::from_slice::<ServiceCommand>(&buffer) {
-                        let response = Self::handle_command(command, &state_manager, &config, &capture_handle).await;
+                        let response = Self::handle_command(command, &state_manager, &config, &capture_handle, &clipboard_handle, &clipboard_manager).await;
                         
                         if let Ok(response_json) = serde_json::to_string(&response) {
                             if let Err(e) = stream.write_all(response_json.as_bytes()).await {
@@ -268,7 +316,9 @@ impl StandaloneService {
         command: ServiceCommand,
         state_manager: &Arc<ServiceStateManager>,
         config: &Config,
-        capture_handle: &Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>
+        capture_handle: &Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_handle: &Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_manager: &Arc<Mutex<ClipboardManager>>,
     ) -> ServiceResponse {
         match command {
             ServiceCommand::Start => {
@@ -281,12 +331,19 @@ impl StandaloneService {
                                 success: false,
                                 message: format!("启动截屏失败: {}", e),
                                 state: Some(state_manager.get_state().await),
+                                clipboard_status: Some(clipboard_manager.lock().await.status()),
                             }
                         } else {
+                            if config.clipboard_enabled {
+                                if let Err(e) = Self::start_clipboard_task(config, clipboard_handle, clipboard_manager).await {
+                                    eprintln!("启动剪贴板监听失败: {}", e);
+                                }
+                            }
                             ServiceResponse {
                                 success: true,
                                 message: "服务已启动".to_string(),
                                 state: Some(state_manager.get_state().await),
+                                clipboard_status: Some(clipboard_manager.lock().await.status()),
                             }
                         }
                     }
@@ -294,11 +351,13 @@ impl StandaloneService {
                         success: true,
                         message: "服务已在运行".to_string(),
                         state: Some(state_manager.get_state().await),
+                        clipboard_status: Some(clipboard_manager.lock().await.status()),
                     },
                     Err(e) => ServiceResponse {
                         success: false,
                         message: format!("启动失败: {}", e),
                         state: Some(state_manager.get_state().await),
+                        clipboard_status: Some(clipboard_manager.lock().await.status()),
                     }
                 }
             }
@@ -307,16 +366,19 @@ impl StandaloneService {
                     Ok(_) => {
                         // 停止截屏循环
                         Self::stop_capture_task(capture_handle).await;
+                        Self::stop_clipboard_task(clipboard_handle).await;
                         ServiceResponse {
                             success: true,
                             message: "服务已停止".to_string(),
                             state: Some(state_manager.get_state().await),
+                            clipboard_status: Some(clipboard_manager.lock().await.status()),
                         }
                     }
                     Err(e) => ServiceResponse {
                         success: false,
                         message: format!("停止失败: {}", e),
                         state: Some(state_manager.get_state().await),
+                        clipboard_status: Some(clipboard_manager.lock().await.status()),
                     }
                 }
             }
@@ -325,6 +387,70 @@ impl StandaloneService {
                 success: true,
                 message: "状态查询成功".to_string(),
                 state: Some(state_manager.get_state().await),
+                clipboard_status: Some(clipboard_manager.lock().await.status()),
+            },
+            ServiceCommand::ClipboardStatus => ServiceResponse {
+                success: true,
+                message: "剪贴板状态查询成功".to_string(),
+                state: Some(state_manager.get_state().await),
+                clipboard_status: Some(clipboard_manager.lock().await.status()),
+            },
+            ServiceCommand::ClipboardList { limit } => {
+                let guard = clipboard_manager.lock().await;
+                let items = guard.list_recent(limit.unwrap_or(20));
+                let mut message = format!("最近 {} 条剪贴板记录：", items.len());
+                for item in items {
+                    let preview = item.content.lines().next().unwrap_or("").chars().take(60).collect::<String>();
+                    message.push_str(&format!(
+                        "\n- {} | {} | seen={} | {}",
+                        item.id,
+                        item.last_seen.format("%Y-%m-%d %H:%M:%S"),
+                        item.seen_count,
+                        preview
+                    ));
+                }
+                ServiceResponse {
+                    success: true,
+                    message,
+                    state: Some(state_manager.get_state().await),
+                    clipboard_status: Some(guard.status()),
+                }
+            }
+            ServiceCommand::ClipboardSave { id, target_dir } => {
+                let mut guard = clipboard_manager.lock().await;
+                let path = guard
+                    .save_item_to_markdown(&id, target_dir.map(std::path::PathBuf::from))
+                    .await;
+                match path {
+                    Ok(Some(path)) => ServiceResponse {
+                        success: true,
+                        message: format!("已保存到 {}", path.to_string_lossy()),
+                        state: Some(state_manager.get_state().await),
+                        clipboard_status: Some(guard.status()),
+                    },
+                    Ok(None) => ServiceResponse {
+                        success: false,
+                        message: "未找到对应剪贴板记录".to_string(),
+                        state: Some(state_manager.get_state().await),
+                        clipboard_status: Some(guard.status()),
+                    },
+                    Err(e) => ServiceResponse {
+                        success: false,
+                        message: format!("保存失败: {}", e),
+                        state: Some(state_manager.get_state().await),
+                        clipboard_status: Some(guard.status()),
+                    },
+                }
+            }
+            ServiceCommand::ClipboardAutoSave { enabled } => {
+                let mut guard = clipboard_manager.lock().await;
+                guard.set_auto_save(enabled);
+                ServiceResponse {
+                    success: true,
+                    message: format!("自动保存已{}", if enabled { "开启" } else { "关闭" }),
+                    state: Some(state_manager.get_state().await),
+                    clipboard_status: Some(guard.status()),
+                }
             }
         }
     }
@@ -362,10 +488,44 @@ impl StandaloneService {
             handle.abort();
         }
     }
+
+    async fn start_clipboard_task(
+        config: &Config,
+        clipboard_handle: &Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+        clipboard_manager: &Arc<Mutex<ClipboardManager>>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut handle_guard = clipboard_handle.lock().await;
+        if let Some(handle) = handle_guard.take() {
+            handle.abort();
+        }
+
+        let config_clone = config.clone();
+        let manager_clone = clipboard_manager.clone();
+        let handle = tokio::spawn(async move {
+            if let Err(e) = clipboard::run_clipboard_loop(config_clone, manager_clone).await {
+                eprintln!("剪贴板监听循环出错: {}", e);
+            }
+        });
+        *handle_guard = Some(handle);
+        Ok(())
+    }
+
+    async fn stop_clipboard_task(
+        clipboard_handle: &Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    ) {
+        let mut handle_guard = clipboard_handle.lock().await;
+        if let Some(handle) = handle_guard.take() {
+            handle.abort();
+        }
+    }
     
     /// 启动截屏循环（内部使用）
     async fn start_capture_loop(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         Self::start_capture_task(&self.state_manager, &self.config, &self.capture_handle).await
+    }
+
+    async fn start_clipboard_loop(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        Self::start_clipboard_task(&self.config, &self.clipboard_handle, &self.clipboard_manager).await
     }
     
 
