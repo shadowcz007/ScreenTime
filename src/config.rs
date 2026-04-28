@@ -256,6 +256,16 @@ pub struct Config {
     #[clap(long, env = "CLIPBOARD_AUTO_SAVE", help = "自动保存新剪贴板内容为 Markdown")]
     pub clipboard_auto_save: bool,
 
+    /// Send system notification when clipboard content is auto-saved
+    #[clap(
+        long,
+        env = "CLIPBOARD_NOTIFY_ON_SAVE",
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        help = "自动保存剪贴板为 Markdown 后发送系统通知"
+    )]
+    pub clipboard_notify_on_save: bool,
+
     /// Enable AI filter for clipboard save decisions
     #[clap(
         long,
@@ -462,6 +472,7 @@ impl Config {
         self.clipboard_enabled.hash(&mut hasher);
         self.clipboard_interval_ms.hash(&mut hasher);
         self.clipboard_auto_save.hash(&mut hasher);
+        self.clipboard_notify_on_save.hash(&mut hasher);
         self.clipboard_ai_filter_enabled.hash(&mut hasher);
         self.clipboard_ai_filter_prompt.hash(&mut hasher);
         self.clipboard_ai_min_chars.hash(&mut hasher);

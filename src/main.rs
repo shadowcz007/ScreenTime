@@ -89,6 +89,7 @@ mod tests {
             clipboard_enabled: false,
             clipboard_interval_ms: 500,
             clipboard_auto_save: false,
+            clipboard_notify_on_save: true,
             clipboard_ai_filter_enabled: false,
             clipboard_ai_filter_prompt: "test".to_string(),
             clipboard_ai_min_chars: 20,

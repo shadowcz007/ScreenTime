@@ -7,6 +7,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use tokio::process::Command;
 use tokio::io::AsyncWriteExt;
 use tokio::time::{self, Duration};
 use uuid::Uuid;
@@ -153,6 +154,9 @@ impl ClipboardManager {
                     &format!("auto_saved id={} path={}", item.id, path.to_string_lossy()),
                 )
                 .await;
+                if self.config.clipboard_notify_on_save {
+                    self.notify_clipboard_saved(&path).await;
+                }
             }
         }
 
@@ -300,6 +304,29 @@ impl ClipboardManager {
             .await
         {
             let _ = file.write_all(line.as_bytes()).await;
+        }
+    }
+
+    async fn notify_clipboard_saved(&self, path: &Path) {
+        #[cfg(target_os = "macos")]
+        {
+            let file_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("clipboard.md");
+            let message = format!("已保存：{}", file_name);
+            if let Err(e) = Command::new("osascript")
+                .arg("-e")
+                .arg(format!(
+                    "display notification \"{}\" with title \"OpenRecall 剪贴板已保存\"",
+                    escape_applescript(&message)
+                ))
+                .output()
+                .await
+            {
+                self.log_event("clipboard_notify", &format!("notify_failed {}", e))
+                    .await;
+            }
         }
     }
 }
@@ -539,6 +566,10 @@ fn sanitize_for_log(input: &str, max_chars: usize) -> String {
         out = out.chars().take(max_chars).collect::<String>();
     }
     out
+}
+
+fn escape_applescript(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 async fn load_or_default<T>(path: &Path) -> T

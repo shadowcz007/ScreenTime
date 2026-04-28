@@ -13,6 +13,7 @@
 - **剪贴板采集可读性升级**:
   - 自动保存文件命名升级为 `YYYYMMDD_HHMMSS_<short_hash>_<slug>.md`，并带重名后缀兜底。
   - 新增剪贴板事件日志 `clipboards/events.log`，并默认同步输出到终端。
+  - 新增自动保存系统通知开关 `CLIPBOARD_NOTIFY_ON_SAVE`（默认开启，macOS 使用系统通知）。
 - **截图分析上下文增强（macOS）**:
   - 上下文支持注入“已安装软件清单”（带缓存与刷新周期），减少模型误识别未安装软件。
   - 新增 `INSTALLED_APPS_*` 配置控制扫描范围、刷新频率和注入上限。
